@@ -1,0 +1,81 @@
+export type ForecastMethod =
+  | 'Constante'
+  | 'HypMod'
+  | 'Declinación Hip.'
+  | 'Declinación Exp.'
+  | 'Rap Np'
+  | 'RGP';
+
+export interface AreaCatalogItem {
+  province: string;
+  areaId: string;
+  areaName: string;
+  basin?: string;
+  companies: string[];
+}
+
+export interface AreaSelection extends AreaCatalogItem {
+  startYearOverride?: number;
+}
+
+export interface ForecastDefaults {
+  startYear: number;
+  horizonYears: number;
+  grossMethod: Extract<ForecastMethod, 'Constante' | 'HypMod' | 'Declinación Hip.' | 'Declinación Exp.'>;
+  oilMethod: Extract<ForecastMethod, 'Constante' | 'HypMod' | 'Declinación Hip.' | 'Declinación Exp.' | 'Rap Np'>;
+  gasMethod: Extract<ForecastMethod, 'Constante' | 'HypMod' | 'Declinación Hip.' | 'Declinación Exp.' | 'RGP'>;
+  takeInitialFromHistory: boolean;
+}
+
+export interface AreaForecastOverride {
+  areaId: string;
+  startYear?: number;
+  grossMethod?: ForecastDefaults['grossMethod'];
+  oilMethod?: ForecastDefaults['oilMethod'];
+  gasMethod?: ForecastDefaults['gasMethod'];
+  takeInitialFromHistory?: boolean;
+}
+
+export interface ProductionRecord {
+  areaId: string;
+  areaName: string;
+  wellId: string;
+  wellName: string;
+  year: number;
+  month: number;
+  oil: number;
+  gas: number;
+  water: number;
+  waterInjection: number;
+  raw: Record<string, unknown>;
+}
+
+export interface MonthlyAggregate {
+  date: string;
+  year: number;
+  month: number;
+  oil: number;
+  gas: number;
+  water: number;
+  gross: number;
+  waterInjection: number;
+  oilWells: number;
+  gasWells: number;
+  injectorWells: number;
+  missing: boolean;
+  missingKind: 'none' | 'leading' | 'middle';
+}
+
+export interface AreaWorkbookPlan {
+  selection: AreaSelection;
+  defaults: ForecastDefaults;
+  override?: AreaForecastOverride;
+  mode: 'update' | 'regenerate';
+}
+
+export interface DebugEntry {
+  timestamp: string;
+  step: string;
+  status: 'info' | 'ok' | 'warning' | 'error';
+  detail: string;
+}
