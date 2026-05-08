@@ -28,43 +28,61 @@ export async function buildWorkbook(plans: AreaWorkbookPlan[]): Promise<void> {
   const results: BuildResult[] = [];
   for (const plan of plans) {
     const startYear = plan.override?.startYear ?? plan.selection.startYearOverride ?? plan.defaults.startYear;
-    await appendDebug(createDebugEntry(plan.selection.areaId, 'info', `Descarga desde ${startYear}`));
-    const records = await fetchAreaProduction(plan.selection, startYear, async (message) => {
-      await appendDebug(createDebugEntry(plan.selection.areaId, 'info', message));
-    });
-    const monthly = aggregateMonthly(records, startYear);
-    const middleWarnings = monthly
-      .filter((m) => m.missingKind === 'middle')
-      .map((m) => `${m.year}-${String(m.month).padStart(2, '0')}`);
-    const leadingMissing = monthly.filter((m) => m.missingKind === 'leading').length;
-    let middleMissingPolicy: 'blank' | 'zero' = 'blank';
-    if (middleWarnings.length > 0) {
-      const useZero = window.confirm(
-        `${plan.selection.areaId}: faltan meses intermedios (${middleWarnings.join(', ')}).\n\nAceptar = completar con 0.\nCancelar = dejar vacio/NA.`,
-      );
-      middleMissingPolicy = useZero ? 'zero' : 'blank';
+    try {
+      await appendDebug(createDebugEntry(plan.selection.areaId, 'info', `Descarga desde ${startYear}`));
+      const records = await fetchAreaProduction(plan.selection, startYear, async (message) => {
+        await appendDebug(createDebugEntry(plan.selection.areaId, 'info', message));
+      });
+      await appendDebug(createDebugEntry(plan.selection.areaId, 'ok', `Registros pozo-mes descargados: ${records.length}`));
+
+      const monthly = aggregateMonthly(records, startYear);
+      await appendDebug(createDebugEntry(plan.selection.areaId, 'ok', `Serie mensual armada: ${monthly.length} meses`));
+
+      const middleWarnings = monthly
+        .filter((m) => m.missingKind === 'middle')
+        .map((m) => `${m.year}-${String(m.month).padStart(2, '0')}`);
+      const leadingMissing = monthly.filter((m) => m.missingKind === 'leading').length;
+      let middleMissingPolicy: 'blank' | 'zero' = 'blank';
+      if (middleWarnings.length > 0) {
+        await appendDebug(createDebugEntry(plan.selection.areaId, 'warning', `Se pide decision por faltantes intermedios: ${middleWarnings.join(', ')}`));
+        const useZero = window.confirm(
+          `${plan.selection.areaId}: faltan meses intermedios (${middleWarnings.join(', ')}).\n\nAceptar = completar con 0.\nCancelar = dejar vacio/NA.`,
+        );
+        middleMissingPolicy = useZero ? 'zero' : 'blank';
+        await appendDebug(createDebugEntry(plan.selection.areaId, 'info', `Decision faltantes intermedios: ${middleMissingPolicy}`));
+      }
+      const warnings = middleWarnings;
+      if (leadingMissing > 0) {
+        await appendDebug(createDebugEntry(plan.selection.areaId, 'info', `${leadingMissing} meses iniciales sin dato completados con 0`));
+      }
+      if (warnings.length > 0) {
+        await appendDebug(createDebugEntry(plan.selection.areaId, 'warning', `Meses intermedios faltantes: ${warnings.join(', ')}. Politica: ${middleMissingPolicy}`));
+      }
+      const summary = buildAreaSummary(plan, monthly, middleMissingPolicy);
+      await appendDebug(createDebugEntry(plan.selection.areaId, 'info', `Escritura de hojas iniciada`));
+      await writeAreaSheets(plan, records, monthly, warnings, middleMissingPolicy);
+      await appendDebug(createDebugEntry(plan.selection.areaId, 'ok', `Hojas escritas. Filas resumen area: ${summary.length}`));
+      results.push({
+        areaId: plan.selection.areaId,
+        areaName: plan.selection.areaName,
+        monthly,
+        summary,
+        warnings,
+        middleMissingPolicy,
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.stack ?? error.message : String(error);
+      await appendDebug(createDebugEntry(plan.selection.areaId, 'error', detail));
+      throw error;
     }
-    const warnings = middleWarnings;
-    if (leadingMissing > 0) {
-      await appendDebug(createDebugEntry(plan.selection.areaId, 'info', `${leadingMissing} meses iniciales sin dato completados con 0`));
-    }
-    if (warnings.length > 0) {
-      await appendDebug(createDebugEntry(plan.selection.areaId, 'warning', `Meses intermedios faltantes: ${warnings.join(', ')}. Politica: ${middleMissingPolicy}`));
-    }
-    const summary = buildAreaSummary(plan, monthly, middleMissingPolicy);
-    await writeAreaSheets(plan, records, monthly, warnings, middleMissingPolicy);
-    results.push({
-      areaId: plan.selection.areaId,
-      areaName: plan.selection.areaName,
-      monthly,
-      summary,
-      warnings,
-      middleMissingPolicy,
-    });
   }
 
+  await appendDebug(createDebugEntry('Resumen_Areas', 'info', `Escritura resumen consolidado para ${results.length} areas`));
   await writeSummary(results);
+  await appendDebug(createDebugEntry('Resumen_Areas', 'ok', 'Resumen consolidado escrito'));
+  await appendDebug(createDebugEntry(STATE_SHEET, 'info', 'Guardando estado oculto'));
   await writeState(plans, results);
+  await appendDebug(createDebugEntry(STATE_SHEET, 'ok', 'Estado guardado'));
   await appendDebug(createDebugEntry('Fin', 'ok', 'Workbook actualizado'));
 }
 
