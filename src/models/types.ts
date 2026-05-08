@@ -73,6 +73,18 @@ export interface AreaWorkbookPlan {
   mode: 'update' | 'regenerate';
 }
 
+export interface BuildProgress {
+  areaId?: string;
+  areaIndex?: number;
+  areaTotal?: number;
+  completed: number;
+  total: number;
+  percent: number;
+  message: string;
+}
+
+export type BuildProgressHandler = (progress: BuildProgress) => void;
+
 export interface DebugEntry {
   timestamp: string;
   step: string;

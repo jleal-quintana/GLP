@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { buildWorkbook } from '../excel/workbookBuilder';
-import type { AreaCatalogItem, AreaSelection, AreaWorkbookPlan, ForecastDefaults } from '../models/types';
+import type { AreaCatalogItem, AreaSelection, AreaWorkbookPlan, BuildProgress, ForecastDefaults } from '../models/types';
 import { fetchAreaCatalog } from '../services/capiv';
 import { appendDebug, createDebugEntry } from '../excel/debugSheet';
 
@@ -22,6 +22,7 @@ export function App() {
   const [mode, setMode] = useState<'update' | 'regenerate'>('update');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('Catalogo pendiente de actualizar');
+  const [progress, setProgress] = useState<BuildProgress | null>(null);
 
   const provinces = useMemo(() => {
     const values = [...new Set(catalog.map((item) => item.province).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
@@ -84,13 +85,22 @@ export function App() {
     }
     setBusy(true);
     setMessage('Generando workbook');
+    setProgress({
+      completed: 0,
+      total: 1,
+      percent: 0,
+      message: 'Preparando generacion',
+    });
     try {
       const plans: AreaWorkbookPlan[] = selected.map((selection) => ({
         selection,
         defaults,
         mode,
       }));
-      await buildWorkbook(plans);
+      await buildWorkbook(plans, (nextProgress) => {
+        setProgress(nextProgress);
+        setMessage(nextProgress.message);
+      });
       setMessage('Workbook actualizado');
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
@@ -245,6 +255,18 @@ export function App() {
       </section>
 
       <footer className="actionbar">
+        {progress && (
+          <div className="progress-box" aria-live="polite">
+            <div className="progress-meta">
+              <strong>{progress.percent}%</strong>
+              <span>{progress.completed}/{progress.total}</span>
+            </div>
+            <div className="progress-track">
+              <div className="progress-fill" style={{ width: `${progress.percent}%` }} />
+            </div>
+            <p>{progress.message}</p>
+          </div>
+        )}
         <p>{message}</p>
         <button type="button" className="primary" disabled={busy || selected.length === 0} onClick={runBuild}>
           {busy ? 'Procesando' : 'Generar hojas'}

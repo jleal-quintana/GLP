@@ -237,6 +237,39 @@ button:disabled {
   font-size: 12px;
 }
 
+.progress-box {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #33492d;
+  font-size: 12px;
+}
+
+.progress-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #e3e7de;
+}
+
+.progress-fill {
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+  background: #6b7b38;
+  transition: width 180ms ease;
+}
+
+.progress-box p {
+  margin-bottom: 0;
+}
+
 .primary {
   width: 100%;
   min-height: 40px;

@@ -1,5 +1,5 @@
 import type { AreaCatalogItem, MonthlyAggregate, ProductionRecord } from '../models/types';
-import { parseCsv } from './csv';
+import { parseCsv, parseCsvLine } from './csv';
 import { fetchWithRetry } from './http';
 
 const API_ACTION_URL = 'https://datos.gob.ar/api/3/action';
@@ -30,9 +30,17 @@ const PROD_RESOURCE_BY_YEAR: Record<number, string> = {
 };
 
 const NC_PRODUCTION_RESOURCE = 'energia_b5b58cdc-9e07-41f9-b392-fb9ec68b0725';
-const resourceCache = new Map<string, Promise<Record<string, string>[]>>();
+const urlCache = new Map<string, Promise<string>>();
 
 async function getResourceDownloadUrl(resourceId: string): Promise<string> {
+  const cached = urlCache.get(resourceId);
+  if (cached) return cached;
+  const request = getResourceDownloadUrlUncached(resourceId);
+  urlCache.set(resourceId, request);
+  return request;
+}
+
+async function getResourceDownloadUrlUncached(resourceId: string): Promise<string> {
   const response = await fetchWithRetry(`${API_ACTION_URL}/resource_show?id=${resourceId}`);
   if (!response.ok) throw new Error(`resource_show failed ${response.status} for ${resourceId}`);
   const data = await response.json();
@@ -41,18 +49,70 @@ async function getResourceDownloadUrl(resourceId: string): Promise<string> {
 }
 
 async function downloadResourceCsv(resourceId: string): Promise<Record<string, string>[]> {
-  const cached = resourceCache.get(resourceId);
-  if (cached) return cached;
-  const request = downloadResourceCsvUncached(resourceId);
-  resourceCache.set(resourceId, request);
-  return request;
-}
-
-async function downloadResourceCsvUncached(resourceId: string): Promise<Record<string, string>[]> {
   const url = await getResourceDownloadUrl(resourceId);
   const response = await fetchWithRetry(url);
   if (!response.ok) throw new Error(`CSV download failed ${response.status} for ${resourceId}`);
   return parseCsv(await response.text());
+}
+
+async function streamResourceCsv(
+  resourceId: string,
+  onRecord: (record: Record<string, string>) => void,
+): Promise<number> {
+  const url = await getResourceDownloadUrl(resourceId);
+  const response = await fetchWithRetry(url);
+  if (!response.ok) throw new Error(`CSV download failed ${response.status} for ${resourceId}`);
+
+  if (!response.body) {
+    const records = parseCsv(await response.text());
+    records.forEach(onRecord);
+    return records.length;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let pending = '';
+  let headers: string[] | null = null;
+  let rowCount = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    pending += decoder.decode(value, { stream: !done });
+    const lines = pending.split(/\r?\n/);
+    pending = lines.pop() ?? '';
+
+    for (const line of lines) {
+      if (!line) continue;
+      if (!headers) {
+        headers = parseCsvLine(line).map((h, index) => (index === 0 ? h.replace(/^\uFEFF/, '') : h));
+        continue;
+      }
+      onRecord(recordFromLine(headers, line));
+      rowCount++;
+    }
+
+    if (done) break;
+  }
+
+  if (pending.trim()) {
+    if (!headers) {
+      headers = parseCsvLine(pending).map((h, index) => (index === 0 ? h.replace(/^\uFEFF/, '') : h));
+    } else {
+      onRecord(recordFromLine(headers, pending));
+      rowCount++;
+    }
+  }
+
+  return rowCount;
+}
+
+function recordFromLine(headers: string[], line: string): Record<string, string> {
+  const cols = parseCsvLine(line);
+  const record: Record<string, string> = {};
+  headers.forEach((header, index) => {
+    record[header] = cols[index] ?? '';
+  });
+  return record;
 }
 
 function text(record: Record<string, string>, ...keys: string[]): string {
@@ -122,7 +182,7 @@ function normalizeProductionRecord(record: Record<string, string>, areaId: strin
     gas: numberValue(record, 'prod_gas', 'gas'),
     water: numberValue(record, 'prod_agua', 'agua'),
     waterInjection: numberValue(record, 'iny_agua', 'agua_iny', 'inyeccion_agua'),
-    raw: record,
+    raw: {},
   };
 }
 
@@ -139,29 +199,42 @@ export async function fetchAreaProduction(
     const resourceId = PROD_RESOURCE_BY_YEAR[year];
     if (!resourceId) continue;
     onStep?.(`Descargando produccion convencional ${area.areaId} ${year}`);
-    const rows = await downloadResourceCsv(resourceId);
-    for (const row of rows) {
+    let matched = 0;
+    const rows = await streamResourceCsv(resourceId, (row) => {
       const normalized = normalizeProductionRecord(row, area.areaId, area.areaName);
-      if (!normalized) continue;
+      if (!normalized) return;
       const key = `${normalized.wellName}|${normalized.wellId}|${normalized.year}|${normalized.month}|conv`;
-      if (seen.has(key)) continue;
+      if (seen.has(key)) return;
       seen.add(key);
       records.push(normalized);
-    }
+      matched++;
+    });
+    onStep?.(`Descargado produccion convencional ${area.areaId} ${year}: ${matched} de ${rows} filas`);
   }
 
   onStep?.(`Descargando produccion no convencional ${area.areaId}`);
-  const ncRows = await downloadResourceCsv(NC_PRODUCTION_RESOURCE);
-  for (const row of ncRows) {
+  let ncMatched = 0;
+  const ncRows = await streamResourceCsv(NC_PRODUCTION_RESOURCE, (row) => {
     const normalized = normalizeProductionRecord(row, area.areaId, area.areaName);
-    if (!normalized || normalized.year < startYear) continue;
+    if (!normalized || normalized.year < startYear) return;
     const key = `${normalized.wellName}|${normalized.wellId}|${normalized.year}|${normalized.month}|nc`;
-    if (seen.has(key)) continue;
+    if (seen.has(key)) return;
     seen.add(key);
     records.push(normalized);
-  }
+    ncMatched++;
+  });
+  onStep?.(`Descargado produccion no convencional ${area.areaId}: ${ncMatched} de ${ncRows} filas`);
 
   return records.sort((a, b) => a.year - b.year || a.month - b.month || a.wellName.localeCompare(b.wellName));
+}
+
+export function countProductionResources(startYear: number): number {
+  const currentYear = new Date().getFullYear();
+  let count = 1;
+  for (let year = startYear; year <= currentYear; year++) {
+    if (PROD_RESOURCE_BY_YEAR[year]) count++;
+  }
+  return count;
 }
 
 export function aggregateMonthly(records: ProductionRecord[], startYear: number): MonthlyAggregate[] {
