@@ -1,4 +1,3 @@
-import { brand } from '../branding/tokens';
 import type {
   AreaWorkbookPlan,
   BuildProgressHandler,
@@ -11,6 +10,7 @@ import { appendDebug, createDebugEntry } from './debugSheet';
 import { writeAreaSheets } from './areaSheets';
 import { appendDownloadLedgerEvent, ensureDownloadLedger } from './downloadLedger';
 import { SUMMARY_SHEET, STATE_SHEET } from './names';
+import { addLineChart, getOrAddSheet, writeTable, writeTitle } from './sheetLayout';
 
 interface BuildResult {
   areaId: string;
@@ -145,15 +145,6 @@ function estimateWorkUnits(plans: AreaWorkbookPlan[]): number {
   }, globalSteps);
 }
 
-async function getOrAddSheet(context: Excel.RequestContext, name: string): Promise<Excel.Worksheet> {
-  let sheet = context.workbook.worksheets.getItemOrNullObject(name);
-  sheet.load('name');
-  await context.sync();
-  if (sheet.isNullObject) sheet = context.workbook.worksheets.add(name);
-  sheet.visibility = Excel.SheetVisibility.visible;
-  return sheet;
-}
-
 async function writeSummary(results: BuildResult[]): Promise<void> {
   await Excel.run(async (context) => {
     const sheet = await getOrAddSheet(context, SUMMARY_SHEET);
@@ -188,42 +179,6 @@ async function writeState(plans: AreaWorkbookPlan[], results: BuildResult[]): Pr
   });
 }
 
-function writeTitle(sheet: Excel.Worksheet, title: string, subtitle: string): void {
-  sheet.getRange('A1:H1').merge(false);
-  sheet.getRange('A1').values = [[title]];
-  sheet.getRange('A1').format.font.bold = true;
-  sheet.getRange('A1').format.font.size = 16;
-  sheet.getRange('A1').format.font.color = brand.olive;
-  sheet.getRange('A2:H2').merge(false);
-  sheet.getRange('A2').values = [[subtitle]];
-  sheet.getRange('A2').format.font.color = brand.muted;
-}
-
-function writeTable(sheet: Excel.Worksheet, headerAddress: string, headers: string[], rows: (string | number)[][], label: string): void {
-  validateRows(label, headerAddress, headers, rows);
-  const header = sheet.getRange(headerAddress).getCell(0, 0).getResizedRange(0, headers.length - 1);
-  header.values = [headers];
-  header.format.fill.color = brand.olive;
-  header.format.font.color = '#FFFFFF';
-  header.format.font.bold = true;
-
-  if (rows.length > 0) {
-    const body = header.getOffsetRange(1, 0).getResizedRange(rows.length - 1, headers.length - 1);
-    body.values = rows;
-  }
-  header.worksheet.getUsedRangeOrNullObject().format.autofitColumns();
-}
-
-function validateRows(sheetName: string, headerAddress: string, headers: string[], rows: (string | number)[][]): void {
-  for (let index = 0; index < rows.length; index++) {
-    if (rows[index].length !== headers.length) {
-      throw new Error(
-        `${sheetName} ${headerAddress}: fila ${index + 1} tiene ${rows[index].length} columnas; se esperaban ${headers.length}`,
-      );
-    }
-  }
-}
-
 function writeConsolidatedMonthly(sheet: Excel.Worksheet, results: BuildResult[]): void {
   const byDate = new Map<string, { oil: number; gas: number; water: number; gross: number; kind: 'hist' | 'prono' }>();
   for (const result of results) {
@@ -243,13 +198,6 @@ function writeConsolidatedMonthly(sheet: Excel.Worksheet, results: BuildResult[]
   writeTable(sheet, 'A14:F14', ['Fecha', 'Tipo', 'Petroleo total', 'Gas total', 'Agua total', 'Bruta total'], rows, 'Resumen mensual');
   const rowCount = Math.max(2, rows.length + 1);
   addLineChart(sheet, sheet.getRangeByIndexes(13, 0, rowCount, 6), 'Consolidado total', 'I4', 'P22');
-}
-
-function addLineChart(sheet: Excel.Worksheet, source: Excel.Range, title: string, topLeft: string, bottomRight: string): void {
-  const chart = sheet.charts.add(Excel.ChartType.line, source, Excel.ChartSeriesBy.columns);
-  chart.title.text = title;
-  chart.legend.position = Excel.ChartLegendPosition.bottom;
-  chart.setPosition(topLeft, bottomRight);
 }
 
 function buildAreaSummary(

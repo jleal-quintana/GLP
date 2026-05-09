@@ -1,8 +1,8 @@
-import { brand } from '../branding/tokens';
 import { forecastFormula, lastNonMissing, nextMonth } from '../domain/forecast';
 import type { AreaWorkbookPlan, MonthlyAggregate, ProductionRecord } from '../models/types';
 import { ensureDebugSheet } from './debugSheet';
 import { areaSheetNames } from './names';
+import { addLineChart, getOrAddSheet, writeTable, writeTitle } from './sheetLayout';
 
 export async function writeAreaSheets(
   plan: AreaWorkbookPlan,
@@ -32,15 +32,6 @@ export async function writeAreaSheets(
 
     await context.sync();
   });
-}
-
-async function getOrAddSheet(context: Excel.RequestContext, name: string): Promise<Excel.Worksheet> {
-  let sheet = context.workbook.worksheets.getItemOrNullObject(name);
-  sheet.load('name');
-  await context.sync();
-  if (sheet.isNullObject) sheet = context.workbook.worksheets.add(name);
-  sheet.visibility = Excel.SheetVisibility.visible;
-  return sheet;
 }
 
 async function deleteIfExists(context: Excel.RequestContext, names: string[]): Promise<void> {
@@ -246,49 +237,6 @@ function writeChartsSheet(
   addLineChart(sheet, prono.getRangeByIndexes(11, 0, pronoRows, 7), 'Bruta', 'A24', 'H42');
   addLineChart(sheet, prono.getRangeByIndexes(11, 0, pronoRows, 12), 'Ratios', 'I24', 'P42');
   addLineChart(sheet, pozos.getRangeByIndexes(8, 0, pozosRows, 4), 'Pozos', 'A44', 'H62');
-}
-
-function writeTitle(sheet: Excel.Worksheet, title: string, subtitle: string): void {
-  sheet.getRange('A1:H1').merge(false);
-  sheet.getRange('A1').values = [[title]];
-  sheet.getRange('A1').format.font.bold = true;
-  sheet.getRange('A1').format.font.size = 16;
-  sheet.getRange('A1').format.font.color = brand.olive;
-  sheet.getRange('A2:H2').merge(false);
-  sheet.getRange('A2').values = [[subtitle]];
-  sheet.getRange('A2').format.font.color = brand.muted;
-}
-
-function writeTable(sheet: Excel.Worksheet, headerAddress: string, headers: string[], rows: (string | number)[][], label: string): void {
-  validateRows(label, headerAddress, headers, rows);
-  const header = sheet.getRange(headerAddress).getCell(0, 0).getResizedRange(0, headers.length - 1);
-  header.values = [headers];
-  header.format.fill.color = brand.olive;
-  header.format.font.color = '#FFFFFF';
-  header.format.font.bold = true;
-
-  if (rows.length > 0) {
-    const body = header.getOffsetRange(1, 0).getResizedRange(rows.length - 1, headers.length - 1);
-    body.values = rows;
-  }
-  header.worksheet.getUsedRangeOrNullObject().format.autofitColumns();
-}
-
-function validateRows(label: string, headerAddress: string, headers: string[], rows: (string | number)[][]): void {
-  for (let index = 0; index < rows.length; index++) {
-    if (rows[index].length !== headers.length) {
-      throw new Error(
-        `${label} ${headerAddress}: fila ${index + 1} tiene ${rows[index].length} columnas; se esperaban ${headers.length}`,
-      );
-    }
-  }
-}
-
-function addLineChart(sheet: Excel.Worksheet, source: Excel.Range, title: string, topLeft: string, bottomRight: string): void {
-  const chart = sheet.charts.add(Excel.ChartType.line, source, Excel.ChartSeriesBy.columns);
-  chart.title.text = title;
-  chart.legend.position = Excel.ChartLegendPosition.bottom;
-  chart.setPosition(topLeft, bottomRight);
 }
 
 function maybeBlank(month: MonthlyAggregate, value: number, middleMissingPolicy: 'blank' | 'zero'): string | number {

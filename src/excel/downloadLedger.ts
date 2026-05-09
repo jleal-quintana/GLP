@@ -1,5 +1,5 @@
-import { brand } from '../branding/tokens';
 import type { AreaWorkbookPlan, CapituloIvDownloadEvent, ProductionRecord } from '../models/types';
+import { getOrAddSheet, writeTable, writeTitle } from './sheetLayout';
 
 export const DOWNLOAD_LEDGER_SHEET = 'CapIV_Descarga';
 
@@ -13,11 +13,7 @@ export async function ensureDownloadLedger(plan: AreaWorkbookPlan): Promise<void
     if (used.isNullObject) {
       writeTitle(sheet, 'Descarga Capitulo IV', 'Resumen incremental por recurso descargado');
       const headers = ['Timestamp', 'Area', 'Nombre', 'Evento', 'Fuente', 'Anio recurso', 'Filas leidas', 'Filas area', 'Petroleo', 'Gas', 'Agua', 'Agua iny.'];
-      const header = sheet.getRange('A4:L4');
-      header.values = [headers];
-      header.format.fill.color = brand.olive;
-      header.format.font.color = '#FFFFFF';
-      header.format.font.bold = true;
+      writeTable(sheet, 'A4:L4', headers, [], 'Descarga Capitulo IV');
       sheet.freezePanes.freezeRows(4);
     }
 
@@ -56,26 +52,6 @@ export async function appendDownloadLedgerEvent(plan: AreaWorkbookPlan, event: C
     sheet.getRange('A2').values = [[`Ultimo recurso: ${plan.selection.areaId} ${event.source} ${event.year ?? 'NC'} - ${event.matchedRows} coincidencias de ${event.scannedRows} filas`]];
     await context.sync();
   });
-}
-
-async function getOrAddSheet(context: Excel.RequestContext, name: string): Promise<Excel.Worksheet> {
-  let sheet = context.workbook.worksheets.getItemOrNullObject(name);
-  sheet.load('name');
-  await context.sync();
-  if (sheet.isNullObject) sheet = context.workbook.worksheets.add(name);
-  sheet.visibility = Excel.SheetVisibility.visible;
-  return sheet;
-}
-
-function writeTitle(sheet: Excel.Worksheet, title: string, subtitle: string): void {
-  sheet.getRange('A1:H1').merge(false);
-  sheet.getRange('A1').values = [[title]];
-  sheet.getRange('A1').format.font.bold = true;
-  sheet.getRange('A1').format.font.size = 16;
-  sheet.getRange('A1').format.font.color = brand.olive;
-  sheet.getRange('A2:H2').merge(false);
-  sheet.getRange('A2').values = [[subtitle]];
-  sheet.getRange('A2').format.font.color = brand.muted;
 }
 
 function summarizeRecords(records: ProductionRecord[]): Pick<ProductionRecord, 'oil' | 'gas' | 'water' | 'waterInjection'> {
