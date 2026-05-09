@@ -42,7 +42,7 @@ export function writeTable(sheet: Excel.Worksheet, headerAddress: string, header
   if (rows.length > 0) {
     for (let offset = 0; offset < rows.length; offset += TABLE_WRITE_BATCH_ROWS) {
       const batch = rows.slice(offset, offset + TABLE_WRITE_BATCH_ROWS);
-      const body = header.getOffsetRange(1 + offset, 0).getResizedRange(batch.length - 1, headers.length - 1);
+      const body = header.getCell(0, 0).getOffsetRange(1 + offset, 0).getResizedRange(batch.length - 1, headers.length - 1);
       writeRangeValues(body, batch, `${label} filas ${offset + 1}-${offset + batch.length}`);
     }
   }
