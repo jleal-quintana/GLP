@@ -286,7 +286,7 @@ function writeHdpSheet(
     maybeBlank(m, m.injectorWells, middleMissingPolicy),
     m.missingKind === 'leading' ? 'Inicio' : m.missingKind === 'middle' ? 'Intermedio' : '',
   ]);
-  writeTable(sheet, 'A9:J9', headers, rows);
+  writeTable(sheet, 'A9:J9', headers, rows, `HDP ${plan.selection.areaId}`);
 }
 
 function writePronoSheet(
@@ -370,7 +370,7 @@ function writePronoSheet(
       ]);
     }
   }
-  writeTable(sheet, 'A12:L12', headers, rows);
+  writeTable(sheet, 'A12:L12', headers, rows, `Prono ${plan.selection.areaId}`);
 }
 
 function writePozosSheet(
@@ -420,7 +420,7 @@ function writePozosSheet(
       ]);
     }
   }
-  writeTable(sheet, 'A9:D9', headers, rows);
+  writeTable(sheet, 'A9:D9', headers, rows, 'Prono Pozos');
 }
 
 function writeDetailSheet(sheet: Excel.Worksheet, records: ProductionRecord[]): void {
@@ -428,7 +428,7 @@ function writeDetailSheet(sheet: Excel.Worksheet, records: ProductionRecord[]): 
   writeTitle(sheet, 'Detalle Capitulo IV', 'Pozo-mes descargado');
   const headers = ['Anio', 'Mes', 'Area', 'Pozo', 'Id pozo', 'Petroleo', 'Gas', 'Agua', 'Agua iny.'];
   const rows = records.map((r) => [r.year, r.month, r.areaId, r.wellName, r.wellId, r.oil, r.gas, r.water, r.waterInjection]);
-  writeTable(sheet, 'A4:I4', headers, rows);
+  writeTable(sheet, 'A4:I4', headers, rows, 'Detalle Capitulo IV');
 }
 
 function writeChartsSheet(
@@ -470,7 +470,7 @@ async function writeSummary(results: BuildResult[]): Promise<void> {
         result.warnings.join(', '),
       ];
     });
-    writeTable(sheet, 'A4:G4', headers, rows);
+    writeTable(sheet, 'A4:G4', headers, rows, 'Resumen Areas');
     writeConsolidatedMonthly(sheet, results);
     await context.sync();
   });
@@ -497,8 +497,8 @@ function writeTitle(sheet: Excel.Worksheet, title: string, subtitle: string): vo
   sheet.getRange('A2').format.font.color = brand.muted;
 }
 
-function writeTable(sheet: Excel.Worksheet, headerAddress: string, headers: string[], rows: (string | number)[][]): void {
-  validateRows(sheet.name, headerAddress, headers, rows);
+function writeTable(sheet: Excel.Worksheet, headerAddress: string, headers: string[], rows: (string | number)[][], label: string): void {
+  validateRows(label, headerAddress, headers, rows);
   const header = sheet.getRange(headerAddress).getCell(0, 0).getResizedRange(0, headers.length - 1);
   header.values = [headers];
   header.format.fill.color = brand.olive;
@@ -538,7 +538,7 @@ function writeConsolidatedMonthly(sheet: Excel.Worksheet, results: BuildResult[]
   const rows = [...byDate.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, values]) => [date, values.kind, values.oil, values.gas, values.water, values.gross]);
-  writeTable(sheet, 'A14:F14', ['Fecha', 'Tipo', 'Petroleo total', 'Gas total', 'Agua total', 'Bruta total'], rows);
+  writeTable(sheet, 'A14:F14', ['Fecha', 'Tipo', 'Petroleo total', 'Gas total', 'Agua total', 'Bruta total'], rows, 'Resumen mensual');
   const rowCount = Math.max(2, rows.length + 1);
   addLineChart(sheet, sheet.getRangeByIndexes(13, 0, rowCount, 6), 'Consolidado total', 'I4', 'P22');
 }
