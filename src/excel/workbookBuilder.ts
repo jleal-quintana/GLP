@@ -30,6 +30,8 @@ interface SummaryMonthly {
   kind: 'hist' | 'prono';
 }
 
+const DOWNLOAD_SHEET_NAME = 'CapIV_Descarga';
+
 export async function buildWorkbook(
   plans: AreaWorkbookPlan[],
   onProgress?: BuildProgressHandler,
@@ -60,10 +62,18 @@ export async function buildWorkbook(
     try {
       report(`Area ${areaIndex}/${plans.length}: ${plan.selection.areaId} desde ${startYear}`, plan, areaIndex);
       await appendDebug(createDebugEntry(plan.selection.areaId, 'info', `Descarga desde ${startYear}`));
-      const records = await fetchAreaProduction(plan.selection, startYear, async (message) => {
-        report(message, plan, areaIndex, message.startsWith('Descargado ') ? 1 : 0);
-        await appendDebug(createDebugEntry(plan.selection.areaId, 'info', message));
-      });
+      await ensureDownloadSheet(plan);
+      const records = await fetchAreaProduction(
+        plan.selection,
+        startYear,
+        async (message) => {
+          report(message, plan, areaIndex, message.startsWith('Descargado ') ? 1 : 0);
+          await appendDebug(createDebugEntry(plan.selection.areaId, 'info', message));
+        },
+        async (resource) => {
+          await appendDownloadRows(plan, resource.kind, resource.year, resource.totalRows, resource.matchedRows);
+        },
+      );
       report(`Filtrando registros ${plan.selection.areaId}: ${records.length} pozo-mes`, plan, areaIndex, 1);
       await appendDebug(createDebugEntry(plan.selection.areaId, 'ok', `Registros pozo-mes descargados: ${records.length}`));
 
@@ -126,6 +136,67 @@ export async function buildWorkbook(
   await appendDebug(createDebugEntry(STATE_SHEET, 'ok', 'Estado guardado'));
   report(`Workbook actualizado`, undefined, undefined, total - completed);
   await appendDebug(createDebugEntry('Fin', 'ok', 'Workbook actualizado'));
+}
+
+async function ensureDownloadSheet(plan: AreaWorkbookPlan): Promise<void> {
+  await Excel.run(async (context) => {
+    const sheet = await getOrAddSheet(context, DOWNLOAD_SHEET_NAME);
+    const used = sheet.getUsedRangeOrNullObject();
+    used.load('rowCount');
+    await context.sync();
+    if (used.isNullObject) {
+      writeTitle(sheet, 'Descarga Capitulo IV', 'Datos pegados a medida que termina cada recurso');
+      const headers = ['Timestamp', 'Area', 'Nombre', 'Fuente', 'Anio recurso', 'Anio', 'Mes', 'Pozo', 'Id pozo', 'Petroleo', 'Gas', 'Agua', 'Agua iny.'];
+      const header = sheet.getRange('A4:M4');
+      header.values = [headers];
+      header.format.fill.color = brand.olive;
+      header.format.font.color = '#FFFFFF';
+      header.format.font.bold = true;
+      sheet.freezePanes.freezeRows(4);
+    }
+    sheet.getRange('A2').values = [[`Ultima area iniciada: ${plan.selection.areaId} - ${plan.selection.areaName}`]];
+    await context.sync();
+  });
+}
+
+async function appendDownloadRows(
+  plan: AreaWorkbookPlan,
+  kind: 'conv' | 'nc',
+  year: number | undefined,
+  totalRows: number,
+  records: ProductionRecord[],
+): Promise<void> {
+  await Excel.run(async (context) => {
+    const sheet = await getOrAddSheet(context, DOWNLOAD_SHEET_NAME);
+    const used = sheet.getUsedRangeOrNullObject();
+    used.load('rowCount');
+    await context.sync();
+
+    const nextRow = used.isNullObject ? 4 : used.rowCount;
+    const timestamp = new Date().toISOString();
+    const rows: (string | number)[][] = records.length
+      ? records.map((record) => [
+          timestamp,
+          plan.selection.areaId,
+          plan.selection.areaName,
+          kind === 'conv' ? 'Convencional' : 'No convencional',
+          year ?? '',
+          record.year,
+          record.month,
+          record.wellName,
+          record.wellId,
+          record.oil,
+          record.gas,
+          record.water,
+          record.waterInjection,
+        ])
+      : [[timestamp, plan.selection.areaId, plan.selection.areaName, kind === 'conv' ? 'Convencional' : 'No convencional', year ?? '', '', '', '', '', 0, 0, 0, 0]];
+
+    const range = sheet.getRangeByIndexes(nextRow, 0, rows.length, 13);
+    range.values = rows;
+    sheet.getRange('A2').values = [[`Ultimo recurso: ${plan.selection.areaId} ${kind === 'conv' ? year : 'NC'} - ${records.length} coincidencias de ${totalRows} filas`]];
+    await context.sync();
+  });
 }
 
 function estimateWorkUnits(plans: AreaWorkbookPlan[]): number {

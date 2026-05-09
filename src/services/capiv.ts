@@ -132,15 +132,6 @@ function numberValue(record: Record<string, string>, ...keys: string[]): number 
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function normalizeKey(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toUpperCase();
-}
-
 export async function fetchAreaCatalog(): Promise<AreaCatalogItem[]> {
   const records = await downloadResourceCsv(WELLS_CAP_IV_RESOURCE);
   const byArea = new Map<string, AreaCatalogItem>();
@@ -173,10 +164,7 @@ export async function fetchAreaCatalog(): Promise<AreaCatalogItem[]> {
 
 function normalizeProductionRecord(record: Record<string, string>, areaId: string, areaName: string): ProductionRecord | null {
   const recordAreaId = text(record, 'idareapermisoconcesion', 'cod_area');
-  const recordAreaName = text(record, 'areapermisoconcesion', 'area');
-  const idMatches = recordAreaId && recordAreaId === areaId;
-  const nameMatches = recordAreaName && normalizeKey(recordAreaName) === normalizeKey(areaName);
-  if (!idMatches && !nameMatches) return null;
+  if (recordAreaId !== areaId) return null;
 
   const year = numberValue(record, 'anio');
   const month = numberValue(record, 'mes');
@@ -201,6 +189,7 @@ export async function fetchAreaProduction(
   area: AreaCatalogItem,
   startYear: number,
   onStep?: (message: string) => void,
+  onResourceComplete?: (info: { kind: 'conv' | 'nc'; year?: number; totalRows: number; matchedRows: ProductionRecord[] }) => Promise<void>,
 ): Promise<ProductionRecord[]> {
   const currentYear = new Date().getFullYear();
   const records: ProductionRecord[] = [];
@@ -212,6 +201,7 @@ export async function fetchAreaProduction(
     await delay(DOWNLOAD_PAUSE_MS);
     onStep?.(`Descargando produccion convencional ${area.areaId} ${year}`);
     let matched = 0;
+    const matchedRows: ProductionRecord[] = [];
     const rows = await streamResourceCsv(resourceId, (row) => {
       const normalized = normalizeProductionRecord(row, area.areaId, area.areaName);
       if (!normalized) return;
@@ -219,14 +209,17 @@ export async function fetchAreaProduction(
       if (seen.has(key)) return;
       seen.add(key);
       records.push(normalized);
+      matchedRows.push(normalized);
       matched++;
     });
     onStep?.(`Descargado produccion convencional ${area.areaId} ${year}: ${matched} de ${rows} filas`);
+    await onResourceComplete?.({ kind: 'conv', year, totalRows: rows, matchedRows });
   }
 
   await delay(DOWNLOAD_PAUSE_MS);
   onStep?.(`Descargando produccion no convencional ${area.areaId}`);
   let ncMatched = 0;
+  const ncMatchedRows: ProductionRecord[] = [];
   const ncRows = await streamResourceCsv(NC_PRODUCTION_RESOURCE, (row) => {
     const normalized = normalizeProductionRecord(row, area.areaId, area.areaName);
     if (!normalized || normalized.year < startYear) return;
@@ -234,9 +227,11 @@ export async function fetchAreaProduction(
     if (seen.has(key)) return;
     seen.add(key);
     records.push(normalized);
+    ncMatchedRows.push(normalized);
     ncMatched++;
   });
   onStep?.(`Descargado produccion no convencional ${area.areaId}: ${ncMatched} de ${ncRows} filas`);
+  await onResourceComplete?.({ kind: 'nc', totalRows: ncRows, matchedRows: ncMatchedRows });
 
   return records.sort((a, b) => a.year - b.year || a.month - b.month || a.wellName.localeCompare(b.wellName));
 }
