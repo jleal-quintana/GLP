@@ -1,4 +1,4 @@
-import type { AreaCatalogItem, MonthlyAggregate, ProductionRecord } from '../models/types';
+import type { AreaCatalogItem, CapituloIvDownloadEventHandler, MonthlyAggregate, ProductionRecord } from '../models/types';
 import { parseCsv, parseCsvLine } from './csv';
 import { fetchWithRetry } from './http';
 
@@ -189,7 +189,7 @@ export async function fetchAreaProduction(
   area: AreaCatalogItem,
   startYear: number,
   onStep?: (message: string) => void,
-  onResourceComplete?: (info: { kind: 'conv' | 'nc'; year?: number; totalRows: number; matchedRows: ProductionRecord[] }) => Promise<void>,
+  onEvent?: CapituloIvDownloadEventHandler,
 ): Promise<ProductionRecord[]> {
   const currentYear = new Date().getFullYear();
   const records: ProductionRecord[] = [];
@@ -200,6 +200,7 @@ export async function fetchAreaProduction(
     if (!resourceId) continue;
     await delay(DOWNLOAD_PAUSE_MS);
     onStep?.(`Descargando produccion convencional ${area.areaId} ${year}`);
+    await onEvent?.({ type: 'resource_started', areaId: area.areaId, source: 'convencional', year });
     let matched = 0;
     const matchedRows: ProductionRecord[] = [];
     const rows = await streamResourceCsv(resourceId, (row) => {
@@ -213,11 +214,20 @@ export async function fetchAreaProduction(
       matched++;
     });
     onStep?.(`Descargado produccion convencional ${area.areaId} ${year}: ${matched} de ${rows} filas`);
-    await onResourceComplete?.({ kind: 'conv', year, totalRows: rows, matchedRows });
+    await onEvent?.({
+      type: 'resource_completed',
+      areaId: area.areaId,
+      source: 'convencional',
+      year,
+      scannedRows: rows,
+      matchedRows: matched,
+      records: matchedRows,
+    });
   }
 
   await delay(DOWNLOAD_PAUSE_MS);
   onStep?.(`Descargando produccion no convencional ${area.areaId}`);
+  await onEvent?.({ type: 'resource_started', areaId: area.areaId, source: 'no convencional' });
   let ncMatched = 0;
   const ncMatchedRows: ProductionRecord[] = [];
   const ncRows = await streamResourceCsv(NC_PRODUCTION_RESOURCE, (row) => {
@@ -231,9 +241,18 @@ export async function fetchAreaProduction(
     ncMatched++;
   });
   onStep?.(`Descargado produccion no convencional ${area.areaId}: ${ncMatched} de ${ncRows} filas`);
-  await onResourceComplete?.({ kind: 'nc', totalRows: ncRows, matchedRows: ncMatchedRows });
+  await onEvent?.({
+    type: 'resource_completed',
+    areaId: area.areaId,
+    source: 'no convencional',
+    scannedRows: ncRows,
+    matchedRows: ncMatched,
+    records: ncMatchedRows,
+  });
 
-  return records.sort((a, b) => a.year - b.year || a.month - b.month || a.wellName.localeCompare(b.wellName));
+  const sorted = records.sort((a, b) => a.year - b.year || a.month - b.month || a.wellName.localeCompare(b.wellName));
+  await onEvent?.({ type: 'completed', areaId: area.areaId, records: sorted });
+  return sorted;
 }
 
 function delay(ms: number): Promise<void> {

@@ -50,6 +50,32 @@ export interface ProductionRecord {
   raw: Record<string, unknown>;
 }
 
+export type CapituloIvSource = 'convencional' | 'no convencional';
+
+export type CapituloIvDownloadEvent =
+  | {
+      type: 'resource_started';
+      areaId: string;
+      source: CapituloIvSource;
+      year?: number;
+    }
+  | {
+      type: 'resource_completed';
+      areaId: string;
+      source: CapituloIvSource;
+      year?: number;
+      scannedRows: number;
+      matchedRows: number;
+      records: ProductionRecord[];
+    }
+  | {
+      type: 'completed';
+      areaId: string;
+      records: ProductionRecord[];
+    };
+
+export type CapituloIvDownloadEventHandler = (event: CapituloIvDownloadEvent) => Promise<void> | void;
+
 export interface MonthlyAggregate {
   date: string;
   year: number;

@@ -2,6 +2,7 @@ import { brand } from '../branding/tokens';
 import type {
   AreaWorkbookPlan,
   BuildProgressHandler,
+  CapituloIvDownloadEvent,
   ForecastDefaults,
   ForecastMethod,
   MissingMonthsDecisionHandler,
@@ -70,8 +71,8 @@ export async function buildWorkbook(
           report(message, plan, areaIndex, message.startsWith('Descargado ') ? 1 : 0);
           await appendDebug(createDebugEntry(plan.selection.areaId, 'info', message));
         },
-        async (resource) => {
-          await appendDownloadRows(plan, resource.kind, resource.year, resource.totalRows, resource.matchedRows);
+        async (event) => {
+          await appendDownloadEvent(plan, event);
         },
       );
       report(`Filtrando registros ${plan.selection.areaId}: ${records.length} pozo-mes`, plan, areaIndex, 1);
@@ -145,9 +146,9 @@ async function ensureDownloadSheet(plan: AreaWorkbookPlan): Promise<void> {
     used.load('rowCount');
     await context.sync();
     if (used.isNullObject) {
-      writeTitle(sheet, 'Descarga Capitulo IV', 'Datos pegados a medida que termina cada recurso');
-      const headers = ['Timestamp', 'Area', 'Nombre', 'Fuente', 'Anio recurso', 'Anio', 'Mes', 'Pozo', 'Id pozo', 'Petroleo', 'Gas', 'Agua', 'Agua iny.'];
-      const header = sheet.getRange('A4:M4');
+      writeTitle(sheet, 'Descarga Capitulo IV', 'Resumen incremental por recurso descargado');
+      const headers = ['Timestamp', 'Area', 'Nombre', 'Evento', 'Fuente', 'Anio recurso', 'Filas leidas', 'Filas area', 'Petroleo', 'Gas', 'Agua', 'Agua iny.'];
+      const header = sheet.getRange('A4:L4');
       header.values = [headers];
       header.format.fill.color = brand.olive;
       header.format.font.color = '#FFFFFF';
@@ -159,13 +160,11 @@ async function ensureDownloadSheet(plan: AreaWorkbookPlan): Promise<void> {
   });
 }
 
-async function appendDownloadRows(
+async function appendDownloadEvent(
   plan: AreaWorkbookPlan,
-  kind: 'conv' | 'nc',
-  year: number | undefined,
-  totalRows: number,
-  records: ProductionRecord[],
+  event: CapituloIvDownloadEvent,
 ): Promise<void> {
+  if (event.type !== 'resource_completed') return;
   await Excel.run(async (context) => {
     const sheet = await getOrAddSheet(context, DOWNLOAD_SHEET_NAME);
     const used = sheet.getUsedRangeOrNullObject();
@@ -174,29 +173,39 @@ async function appendDownloadRows(
 
     const nextRow = used.isNullObject ? 4 : used.rowCount;
     const timestamp = new Date().toISOString();
-    const rows: (string | number)[][] = records.length
-      ? records.map((record) => [
-          timestamp,
-          plan.selection.areaId,
-          plan.selection.areaName,
-          kind === 'conv' ? 'Convencional' : 'No convencional',
-          year ?? '',
-          record.year,
-          record.month,
-          record.wellName,
-          record.wellId,
-          record.oil,
-          record.gas,
-          record.water,
-          record.waterInjection,
-        ])
-      : [[timestamp, plan.selection.areaId, plan.selection.areaName, kind === 'conv' ? 'Convencional' : 'No convencional', year ?? '', '', '', '', '', 0, 0, 0, 0]];
+    const totals = summarizeRecords(event.records);
+    const rows: (string | number)[][] = [[
+      timestamp,
+      plan.selection.areaId,
+      plan.selection.areaName,
+      'Recurso descargado',
+      event.source,
+      event.year ?? '',
+      event.scannedRows,
+      event.matchedRows,
+      totals.oil,
+      totals.gas,
+      totals.water,
+      totals.waterInjection,
+    ]];
 
-    const range = sheet.getRangeByIndexes(nextRow, 0, rows.length, 13);
+    const range = sheet.getRangeByIndexes(nextRow, 0, rows.length, 12);
     range.values = rows;
-    sheet.getRange('A2').values = [[`Ultimo recurso: ${plan.selection.areaId} ${kind === 'conv' ? year : 'NC'} - ${records.length} coincidencias de ${totalRows} filas`]];
+    sheet.getRange('A2').values = [[`Ultimo recurso: ${plan.selection.areaId} ${event.source} ${event.year ?? 'NC'} - ${event.matchedRows} coincidencias de ${event.scannedRows} filas`]];
     await context.sync();
   });
+}
+
+function summarizeRecords(records: ProductionRecord[]): Pick<ProductionRecord, 'oil' | 'gas' | 'water' | 'waterInjection'> {
+  return records.reduce(
+    (total, record) => ({
+      oil: total.oil + record.oil,
+      gas: total.gas + record.gas,
+      water: total.water + record.water,
+      waterInjection: total.waterInjection + record.waterInjection,
+    }),
+    { oil: 0, gas: 0, water: 0, waterInjection: 0 },
+  );
 }
 
 function estimateWorkUnits(plans: AreaWorkbookPlan[]): number {
