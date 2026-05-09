@@ -1,6 +1,6 @@
 import { forecastFormula, lastNonMissing, nextMonth } from '../domain/forecast';
 import type { AreaWorkbookPlan, MonthlyAggregate, ProductionRecord } from '../models/types';
-import { ensureDebugSheet } from './debugSheet';
+import { appendDebug, createDebugEntry, ensureDebugSheet } from './debugSheet';
 import { areaSheetNames } from './names';
 import { addLineChart, getOrAddSheet, writeTable, writeTitle } from './sheetLayout';
 
@@ -17,21 +17,44 @@ export async function writeAreaSheets(
     if (plan.mode === 'regenerate') {
       await deleteIfExists(context, Object.values(names));
     }
-
-    const hdp = await getOrAddSheet(context, names.hdp);
-    const prono = await getOrAddSheet(context, names.prono);
-    const pozos = await getOrAddSheet(context, names.pozos);
-    const graficos = await getOrAddSheet(context, names.graficos);
-    const detalle = await getOrAddSheet(context, names.detalle);
-
-    writeHdpSheet(hdp, plan, monthly, warnings, middleMissingPolicy);
-    writePronoSheet(prono, plan, monthly, middleMissingPolicy);
-    writePozosSheet(pozos, plan, monthly, middleMissingPolicy);
-    writeDetailSheet(detalle, records);
-    writeChartsSheet(context, graficos, plan, monthly.length);
-
     await context.sync();
   });
+
+  await writeAreaSheet(plan.selection.areaId, 'HDP', async (context) => {
+    const hdp = await getOrAddSheet(context, areaSheetNames(plan.selection.areaId).hdp);
+    writeHdpSheet(hdp, plan, monthly, warnings, middleMissingPolicy);
+  });
+  await writeAreaSheet(plan.selection.areaId, 'Prono', async (context) => {
+    const prono = await getOrAddSheet(context, areaSheetNames(plan.selection.areaId).prono);
+    writePronoSheet(prono, plan, monthly, middleMissingPolicy);
+  });
+  await writeAreaSheet(plan.selection.areaId, 'Pozos', async (context) => {
+    const pozos = await getOrAddSheet(context, areaSheetNames(plan.selection.areaId).pozos);
+    writePozosSheet(pozos, plan, monthly, middleMissingPolicy);
+  });
+  await writeAreaSheet(plan.selection.areaId, 'Detalle', async (context) => {
+    const detalle = await getOrAddSheet(context, areaSheetNames(plan.selection.areaId).detalle);
+    writeDetailSheet(detalle, records);
+  });
+  await writeAreaSheet(plan.selection.areaId, 'Graficos', async (context) => {
+    const graficos = await getOrAddSheet(context, areaSheetNames(plan.selection.areaId).graficos);
+    writeChartsSheet(context, graficos, plan, monthly.length);
+  });
+}
+
+async function writeAreaSheet(areaId: string, sheetStep: string, writer: (context: Excel.RequestContext) => Promise<void> | void): Promise<void> {
+  await appendDebug(createDebugEntry(areaId, 'info', `Escribiendo hoja ${sheetStep}`));
+  try {
+    await Excel.run(async (context) => {
+      await writer(context);
+      await context.sync();
+    });
+    await appendDebug(createDebugEntry(areaId, 'ok', `Hoja ${sheetStep} escrita`));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    await appendDebug(createDebugEntry(areaId, 'error', `Fallo hoja ${sheetStep}: ${detail}`));
+    throw error;
+  }
 }
 
 async function deleteIfExists(context: Excel.RequestContext, names: string[]): Promise<void> {

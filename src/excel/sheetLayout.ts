@@ -1,5 +1,7 @@
 import { brand } from '../branding/tokens';
 
+const TABLE_WRITE_BATCH_ROWS = 1000;
+
 export async function getOrAddSheet(context: Excel.RequestContext, name: string): Promise<Excel.Worksheet> {
   let sheet = context.workbook.worksheets.getItemOrNullObject(name);
   sheet.load('name');
@@ -29,8 +31,11 @@ export function writeTable(sheet: Excel.Worksheet, headerAddress: string, header
   header.format.font.bold = true;
 
   if (rows.length > 0) {
-    const body = header.getOffsetRange(1, 0).getResizedRange(rows.length - 1, headers.length - 1);
-    body.values = rows;
+    for (let offset = 0; offset < rows.length; offset += TABLE_WRITE_BATCH_ROWS) {
+      const batch = rows.slice(offset, offset + TABLE_WRITE_BATCH_ROWS);
+      const body = header.getOffsetRange(1 + offset, 0).getResizedRange(batch.length - 1, headers.length - 1);
+      body.values = batch;
+    }
   }
   header.worksheet.getUsedRangeOrNullObject().format.autofitColumns();
 }
