@@ -149,19 +149,20 @@ function writePronoSheet(
       const date = new Date(start);
       date.setMonth(date.getMonth() + i);
       const tYears = i / 12;
+      const rowNumber = 12 + rows.length + 1;
       rows.push([
         date.toISOString().slice(0, 10),
         '',
         forecastFormula('B5', lastOil, 'E6', 'E7', tYears),
         '',
-        forecastFormula('B6', lastGas, 'E8', 'E9', tYears, 'E10', lastOil),
+        forecastFormula('B6', lastGas, 'E8', 'E9', tYears, 'E10', `C${rowNumber}`),
         '',
         forecastFormula('B4', lastGross, 'E4', 'E5', tYears),
         '',
-        `=MAX(G${12 + rows.length + 1}-C${12 + rows.length + 1},0)`,
-        `=IF(G${12 + rows.length + 1}>0,I${12 + rows.length + 1}/G${12 + rows.length + 1},"")`,
-        `=IF(C${12 + rows.length + 1}>0,E${12 + rows.length + 1}/C${12 + rows.length + 1}*1000,"")`,
-        `=IF(C${12 + rows.length + 1}>0,I${12 + rows.length + 1}/C${12 + rows.length + 1},"")`,
+        `=MAX(G${rowNumber}-C${rowNumber},0)`,
+        `=IF(G${rowNumber}>0,I${rowNumber}/G${rowNumber},"")`,
+        `=IF(C${rowNumber}>0,E${rowNumber}/C${rowNumber}*1000,"")`,
+        `=IF(C${rowNumber}>0,I${rowNumber}/C${rowNumber},"")`,
       ]);
     }
   }

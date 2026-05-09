@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateForecast, lastNonMissing, nextMonth } from '../src/domain/forecast';
+import { evaluateForecast, forecastFormula, lastNonMissing, nextMonth } from '../src/domain/forecast';
 import type { MonthlyAggregate } from '../src/models/types';
 
 function month(date: string, oil: number, missing = false): MonthlyAggregate {
@@ -36,5 +36,9 @@ describe('forecast projection', () => {
 
   it('moves a published month to the next projection month', () => {
     expect(nextMonth('2025-12-01')).toBe('2026-01-01');
+  });
+
+  it('can express RGP gas as a function of the current oil forecast row', () => {
+    expect(forecastFormula('B6', 100, 'E8', 'E9', 1, 'E10', 'C13')).toContain('IF(B6="RGP",E10*C13/1000');
   });
 });
