@@ -85,6 +85,14 @@ export interface BuildProgress {
 
 export type BuildProgressHandler = (progress: BuildProgress) => void;
 
+export interface MissingMonthsDecision {
+  areaId: string;
+  areaName: string;
+  months: string[];
+}
+
+export type MissingMonthsDecisionHandler = (decision: MissingMonthsDecision) => Promise<'blank' | 'zero'>;
+
 export interface DebugEntry {
   timestamp: string;
   step: string;

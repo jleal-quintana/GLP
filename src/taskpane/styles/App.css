@@ -278,3 +278,49 @@ button:disabled {
   border-color: #33492d;
   font-weight: 700;
 }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(26 26 26 / 0.42);
+}
+
+.decision-modal {
+  display: grid;
+  gap: 10px;
+  width: min(420px, 100%);
+  padding: 16px;
+  border: 1px solid #bec7c1;
+  border-radius: 6px;
+  background: #fefefc;
+  box-shadow: 0 16px 48px rgb(26 26 26 / 0.22);
+}
+
+.decision-modal h2,
+.decision-modal p {
+  margin: 0;
+}
+
+.decision-modal p {
+  color: #5b6470;
+  font-size: 12px;
+}
+
+.missing-list {
+  max-height: 120px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid #dae0e5;
+  border-radius: 4px;
+  background: #f7f8f4;
+}
+
+.modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}

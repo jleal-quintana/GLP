@@ -1,5 +1,13 @@
 import { brand } from '../branding/tokens';
-import type { AreaWorkbookPlan, BuildProgressHandler, ForecastDefaults, ForecastMethod, MonthlyAggregate, ProductionRecord } from '../models/types';
+import type {
+  AreaWorkbookPlan,
+  BuildProgressHandler,
+  ForecastDefaults,
+  ForecastMethod,
+  MissingMonthsDecisionHandler,
+  MonthlyAggregate,
+  ProductionRecord,
+} from '../models/types';
 import { aggregateMonthly, countProductionResources, fetchAreaProduction } from '../services/capiv';
 import { appendDebug, createDebugEntry, ensureDebugSheet } from './debugSheet';
 import { areaSheetNames, SUMMARY_SHEET, STATE_SHEET } from './names';
@@ -22,7 +30,11 @@ interface SummaryMonthly {
   kind: 'hist' | 'prono';
 }
 
-export async function buildWorkbook(plans: AreaWorkbookPlan[], onProgress?: BuildProgressHandler): Promise<void> {
+export async function buildWorkbook(
+  plans: AreaWorkbookPlan[],
+  onProgress?: BuildProgressHandler,
+  onMissingMonths?: MissingMonthsDecisionHandler,
+): Promise<void> {
   const total = estimateWorkUnits(plans);
   let completed = 0;
   const report = (message: string, plan?: AreaWorkbookPlan, areaIndex?: number, increment = 0) => {
@@ -66,10 +78,14 @@ export async function buildWorkbook(plans: AreaWorkbookPlan[], onProgress?: Buil
       let middleMissingPolicy: 'blank' | 'zero' = 'blank';
       if (middleWarnings.length > 0) {
         await appendDebug(createDebugEntry(plan.selection.areaId, 'warning', `Se pide decision por faltantes intermedios: ${middleWarnings.join(', ')}`));
-        const useZero = window.confirm(
-          `${plan.selection.areaId}: faltan meses intermedios (${middleWarnings.join(', ')}).\n\nAceptar = completar con 0.\nCancelar = dejar vacio/NA.`,
-        );
-        middleMissingPolicy = useZero ? 'zero' : 'blank';
+        report(`Esperando decision por faltantes ${plan.selection.areaId}`, plan, areaIndex);
+        middleMissingPolicy = onMissingMonths
+          ? await onMissingMonths({
+              areaId: plan.selection.areaId,
+              areaName: plan.selection.areaName,
+              months: middleWarnings,
+            })
+          : 'blank';
         await appendDebug(createDebugEntry(plan.selection.areaId, 'info', `Decision faltantes intermedios: ${middleMissingPolicy}`));
       }
       const warnings = middleWarnings;

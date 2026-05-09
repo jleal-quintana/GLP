@@ -31,6 +31,7 @@ const PROD_RESOURCE_BY_YEAR: Record<number, string> = {
 
 const NC_PRODUCTION_RESOURCE = 'energia_b5b58cdc-9e07-41f9-b392-fb9ec68b0725';
 const urlCache = new Map<string, Promise<string>>();
+const DOWNLOAD_PAUSE_MS = 250;
 
 async function getResourceDownloadUrl(resourceId: string): Promise<string> {
   const cached = urlCache.get(resourceId);
@@ -131,6 +132,15 @@ function numberValue(record: Record<string, string>, ...keys: string[]): number 
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizeKey(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
 export async function fetchAreaCatalog(): Promise<AreaCatalogItem[]> {
   const records = await downloadResourceCsv(WELLS_CAP_IV_RESOURCE);
   const byArea = new Map<string, AreaCatalogItem>();
@@ -164,8 +174,9 @@ export async function fetchAreaCatalog(): Promise<AreaCatalogItem[]> {
 function normalizeProductionRecord(record: Record<string, string>, areaId: string, areaName: string): ProductionRecord | null {
   const recordAreaId = text(record, 'idareapermisoconcesion', 'cod_area');
   const recordAreaName = text(record, 'areapermisoconcesion', 'area');
-  if (recordAreaId && recordAreaId !== areaId) return null;
-  if (!recordAreaId && recordAreaName && recordAreaName.toUpperCase() !== areaName.toUpperCase()) return null;
+  const idMatches = recordAreaId && recordAreaId === areaId;
+  const nameMatches = recordAreaName && normalizeKey(recordAreaName) === normalizeKey(areaName);
+  if (!idMatches && !nameMatches) return null;
 
   const year = numberValue(record, 'anio');
   const month = numberValue(record, 'mes');
@@ -198,6 +209,7 @@ export async function fetchAreaProduction(
   for (let year = startYear; year <= currentYear; year++) {
     const resourceId = PROD_RESOURCE_BY_YEAR[year];
     if (!resourceId) continue;
+    await delay(DOWNLOAD_PAUSE_MS);
     onStep?.(`Descargando produccion convencional ${area.areaId} ${year}`);
     let matched = 0;
     const rows = await streamResourceCsv(resourceId, (row) => {
@@ -212,6 +224,7 @@ export async function fetchAreaProduction(
     onStep?.(`Descargado produccion convencional ${area.areaId} ${year}: ${matched} de ${rows} filas`);
   }
 
+  await delay(DOWNLOAD_PAUSE_MS);
   onStep?.(`Descargando produccion no convencional ${area.areaId}`);
   let ncMatched = 0;
   const ncRows = await streamResourceCsv(NC_PRODUCTION_RESOURCE, (row) => {
@@ -226,6 +239,10 @@ export async function fetchAreaProduction(
   onStep?.(`Descargado produccion no convencional ${area.areaId}: ${ncMatched} de ${ncRows} filas`);
 
   return records.sort((a, b) => a.year - b.year || a.month - b.month || a.wellName.localeCompare(b.wellName));
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function countProductionResources(startYear: number): number {

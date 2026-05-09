@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { buildWorkbook } from '../excel/workbookBuilder';
-import type { AreaCatalogItem, AreaSelection, AreaWorkbookPlan, BuildProgress, ForecastDefaults } from '../models/types';
+import type { AreaCatalogItem, AreaSelection, AreaWorkbookPlan, BuildProgress, ForecastDefaults, MissingMonthsDecision } from '../models/types';
 import { fetchAreaCatalog } from '../services/capiv';
 import { appendDebug, createDebugEntry } from '../excel/debugSheet';
 
@@ -23,6 +23,10 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('Catalogo pendiente de actualizar');
   const [progress, setProgress] = useState<BuildProgress | null>(null);
+  const [missingDecision, setMissingDecision] = useState<{
+    request: MissingMonthsDecision;
+    resolve: (policy: 'blank' | 'zero') => void;
+  } | null>(null);
 
   const provinces = useMemo(() => {
     const values = [...new Set(catalog.map((item) => item.province).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
@@ -97,10 +101,17 @@ export function App() {
         defaults,
         mode,
       }));
-      await buildWorkbook(plans, (nextProgress) => {
-        setProgress(nextProgress);
-        setMessage(nextProgress.message);
-      });
+      await buildWorkbook(
+        plans,
+        (nextProgress) => {
+          setProgress(nextProgress);
+          setMessage(nextProgress.message);
+        },
+        (request) =>
+          new Promise((resolve) => {
+            setMissingDecision({ request, resolve });
+          }),
+      );
       setMessage('Workbook actualizado');
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
@@ -272,6 +283,38 @@ export function App() {
           {busy ? 'Procesando' : 'Generar hojas'}
         </button>
       </footer>
+      {missingDecision && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="decision-modal">
+            <h2>Meses faltantes</h2>
+            <p>
+              {missingDecision.request.areaId} - {missingDecision.request.areaName}
+            </p>
+            <p className="missing-list">{missingDecision.request.months.join(', ')}</p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  missingDecision.resolve('blank');
+                  setMissingDecision(null);
+                }}
+              >
+                Dejar vacio
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => {
+                  missingDecision.resolve('zero');
+                  setMissingDecision(null);
+                }}
+              >
+                Completar con 0
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
