@@ -2,7 +2,6 @@ import { brand } from '../branding/tokens';
 import type {
   AreaWorkbookPlan,
   BuildProgressHandler,
-  CapituloIvDownloadEvent,
   ForecastDefaults,
   ForecastMethod,
   MissingMonthsDecisionHandler,
@@ -11,6 +10,7 @@ import type {
 } from '../models/types';
 import { aggregateMonthly, countProductionResources, fetchAreaProduction } from '../services/capiv';
 import { appendDebug, createDebugEntry, ensureDebugSheet } from './debugSheet';
+import { appendDownloadLedgerEvent, ensureDownloadLedger } from './downloadLedger';
 import { areaSheetNames, SUMMARY_SHEET, STATE_SHEET } from './names';
 
 interface BuildResult {
@@ -30,8 +30,6 @@ interface SummaryMonthly {
   gross: number;
   kind: 'hist' | 'prono';
 }
-
-const DOWNLOAD_SHEET_NAME = 'CapIV_Descarga';
 
 export async function buildWorkbook(
   plans: AreaWorkbookPlan[],
@@ -63,7 +61,7 @@ export async function buildWorkbook(
     try {
       report(`Area ${areaIndex}/${plans.length}: ${plan.selection.areaId} desde ${startYear}`, plan, areaIndex);
       await appendDebug(createDebugEntry(plan.selection.areaId, 'info', `Descarga desde ${startYear}`));
-      await ensureDownloadSheet(plan);
+      await ensureDownloadLedger(plan);
       const records = await fetchAreaProduction(
         plan.selection,
         startYear,
@@ -72,7 +70,7 @@ export async function buildWorkbook(
           await appendDebug(createDebugEntry(plan.selection.areaId, 'info', message));
         },
         async (event) => {
-          await appendDownloadEvent(plan, event);
+          await appendDownloadLedgerEvent(plan, event);
         },
       );
       report(`Filtrando registros ${plan.selection.areaId}: ${records.length} pozo-mes`, plan, areaIndex, 1);
@@ -137,75 +135,6 @@ export async function buildWorkbook(
   await appendDebug(createDebugEntry(STATE_SHEET, 'ok', 'Estado guardado'));
   report(`Workbook actualizado`, undefined, undefined, total - completed);
   await appendDebug(createDebugEntry('Fin', 'ok', 'Workbook actualizado'));
-}
-
-async function ensureDownloadSheet(plan: AreaWorkbookPlan): Promise<void> {
-  await Excel.run(async (context) => {
-    const sheet = await getOrAddSheet(context, DOWNLOAD_SHEET_NAME);
-    const used = sheet.getUsedRangeOrNullObject();
-    used.load('rowCount');
-    await context.sync();
-    if (used.isNullObject) {
-      writeTitle(sheet, 'Descarga Capitulo IV', 'Resumen incremental por recurso descargado');
-      const headers = ['Timestamp', 'Area', 'Nombre', 'Evento', 'Fuente', 'Anio recurso', 'Filas leidas', 'Filas area', 'Petroleo', 'Gas', 'Agua', 'Agua iny.'];
-      const header = sheet.getRange('A4:L4');
-      header.values = [headers];
-      header.format.fill.color = brand.olive;
-      header.format.font.color = '#FFFFFF';
-      header.format.font.bold = true;
-      sheet.freezePanes.freezeRows(4);
-    }
-    sheet.getRange('A2').values = [[`Ultima area iniciada: ${plan.selection.areaId} - ${plan.selection.areaName}`]];
-    await context.sync();
-  });
-}
-
-async function appendDownloadEvent(
-  plan: AreaWorkbookPlan,
-  event: CapituloIvDownloadEvent,
-): Promise<void> {
-  if (event.type !== 'resource_completed') return;
-  await Excel.run(async (context) => {
-    const sheet = await getOrAddSheet(context, DOWNLOAD_SHEET_NAME);
-    const used = sheet.getUsedRangeOrNullObject();
-    used.load('rowCount');
-    await context.sync();
-
-    const nextRow = used.isNullObject ? 4 : used.rowCount;
-    const timestamp = new Date().toISOString();
-    const totals = summarizeRecords(event.records);
-    const rows: (string | number)[][] = [[
-      timestamp,
-      plan.selection.areaId,
-      plan.selection.areaName,
-      'Recurso descargado',
-      event.source,
-      event.year ?? '',
-      event.scannedRows,
-      event.matchedRows,
-      totals.oil,
-      totals.gas,
-      totals.water,
-      totals.waterInjection,
-    ]];
-
-    const range = sheet.getRangeByIndexes(nextRow, 0, rows.length, 12);
-    range.values = rows;
-    sheet.getRange('A2').values = [[`Ultimo recurso: ${plan.selection.areaId} ${event.source} ${event.year ?? 'NC'} - ${event.matchedRows} coincidencias de ${event.scannedRows} filas`]];
-    await context.sync();
-  });
-}
-
-function summarizeRecords(records: ProductionRecord[]): Pick<ProductionRecord, 'oil' | 'gas' | 'water' | 'waterInjection'> {
-  return records.reduce(
-    (total, record) => ({
-      oil: total.oil + record.oil,
-      gas: total.gas + record.gas,
-      water: total.water + record.water,
-      waterInjection: total.waterInjection + record.waterInjection,
-    }),
-    { oil: 0, gas: 0, water: 0, waterInjection: 0 },
-  );
 }
 
 function estimateWorkUnits(plans: AreaWorkbookPlan[]): number {
