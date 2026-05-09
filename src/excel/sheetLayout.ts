@@ -12,12 +12,11 @@ export async function getOrAddSheet(context: Excel.RequestContext, name: string)
 }
 
 export function writeTitle(sheet: Excel.Worksheet, title: string, subtitle: string): void {
-  sheet.getRange('A1:H1').merge(false);
+  sheet.getRange('A1:H2').unmerge();
   writeMatrix(sheet, 'A1', [[title]], 'Titulo');
   sheet.getRange('A1').format.font.bold = true;
   sheet.getRange('A1').format.font.size = 16;
   sheet.getRange('A1').format.font.color = brand.olive;
-  sheet.getRange('A2:H2').merge(false);
   writeMatrix(sheet, 'A2', [[subtitle]], 'Subtitulo');
   sheet.getRange('A2').format.font.color = brand.muted;
 }
