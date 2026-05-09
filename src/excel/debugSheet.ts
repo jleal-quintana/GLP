@@ -1,5 +1,6 @@
 import type { DebugEntry } from '../models/types';
 import { brand } from '../branding/tokens';
+import { writeMatrix, writeRangeValues } from './sheetLayout';
 
 export const DEBUG_SHEET_NAME = 'CapIV_Debug';
 
@@ -21,7 +22,7 @@ export async function appendDebug(entry: DebugEntry): Promise<void> {
 
     const nextRow = usedRange.isNullObject ? 1 : usedRange.rowCount;
     const range = sheet.getRangeByIndexes(nextRow, 0, 1, 4);
-    range.values = [[entry.timestamp, entry.step, entry.status, entry.detail]];
+    writeRangeValues(range, [[entry.timestamp, entry.step, entry.status, entry.detail]], 'Fila debug');
     formatStatusRow(range, entry.status);
     await context.sync();
   });
@@ -36,7 +37,7 @@ export async function ensureDebugSheet(context: Excel.RequestContext): Promise<E
   if (sheet.isNullObject) {
     sheet = sheets.add(DEBUG_SHEET_NAME);
     const header = sheet.getRange('A1:D1');
-    header.values = [['Timestamp', 'Paso', 'Estado', 'Detalle']];
+    writeMatrix(sheet, 'A1', [['Timestamp', 'Paso', 'Estado', 'Detalle']], 'Encabezado debug');
     header.format.fill.color = brand.forest;
     header.format.font.color = '#FFFFFF';
     header.format.font.bold = true;

@@ -1,5 +1,5 @@
 import type { AreaWorkbookPlan, CapituloIvDownloadEvent, ProductionRecord } from '../models/types';
-import { getOrAddSheet, writeTable, writeTitle } from './sheetLayout';
+import { getOrAddSheet, writeMatrix, writeRangeValues, writeTable, writeTitle } from './sheetLayout';
 
 export const DOWNLOAD_LEDGER_SHEET = 'CapIV_Descarga';
 
@@ -17,7 +17,7 @@ export async function ensureDownloadLedger(plan: AreaWorkbookPlan): Promise<void
       sheet.freezePanes.freezeRows(4);
     }
 
-    sheet.getRange('A2').values = [[`Ultima area iniciada: ${plan.selection.areaId} - ${plan.selection.areaName}`]];
+    writeMatrix(sheet, 'A2', [[`Ultima area iniciada: ${plan.selection.areaId} - ${plan.selection.areaName}`]], 'Estado descarga');
     await context.sync();
   });
 }
@@ -48,8 +48,8 @@ export async function appendDownloadLedgerEvent(plan: AreaWorkbookPlan, event: C
       totals.waterInjection,
     ];
 
-    sheet.getRangeByIndexes(nextRow, 0, 1, row.length).values = [row];
-    sheet.getRange('A2').values = [[`Ultimo recurso: ${plan.selection.areaId} ${event.source} ${event.year ?? 'NC'} - ${event.matchedRows} coincidencias de ${event.scannedRows} filas`]];
+    writeRangeValues(sheet.getRangeByIndexes(nextRow, 0, 1, row.length), [row], 'Fila descarga');
+    writeMatrix(sheet, 'A2', [[`Ultimo recurso: ${plan.selection.areaId} ${event.source} ${event.year ?? 'NC'} - ${event.matchedRows} coincidencias de ${event.scannedRows} filas`]], 'Estado descarga');
     await context.sync();
   });
 }

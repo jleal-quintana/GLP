@@ -10,7 +10,7 @@ import { appendDebug, createDebugEntry } from './debugSheet';
 import { writeAreaSheets } from './areaSheets';
 import { appendDownloadLedgerEvent, ensureDownloadLedger } from './downloadLedger';
 import { SUMMARY_SHEET, STATE_SHEET } from './names';
-import { addLineChart, getOrAddSheet, writeTable, writeTitle } from './sheetLayout';
+import { addLineChart, getOrAddSheet, writeMatrix, writeTable, writeTitle } from './sheetLayout';
 
 interface BuildResult {
   areaId: string;
@@ -174,9 +174,19 @@ async function writeState(plans: AreaWorkbookPlan[], results: BuildResult[]): Pr
     const sheet = await getOrAddSheet(context, STATE_SHEET);
     sheet.visibility = Excel.SheetVisibility.veryHidden;
     sheet.getRange().clear();
-    sheet.getRange('A1').values = [[JSON.stringify({ schema: 1, plans, results, savedAt: new Date().toISOString() }, null, 2)]];
+    writeWorkbookState(sheet, { schema: 1, plans, results, savedAt: new Date().toISOString() });
     await context.sync();
   });
+}
+
+function writeWorkbookState(sheet: Excel.Worksheet, state: unknown): void {
+  const serialized = JSON.stringify(state, null, 2);
+  const chunkSize = 30000;
+  const rows: string[][] = [];
+  for (let index = 0; index < serialized.length; index += chunkSize) {
+    rows.push([serialized.slice(index, index + chunkSize)]);
+  }
+  writeMatrix(sheet, 'A1', rows.length ? rows : [['']], 'Estado workbook');
 }
 
 function writeConsolidatedMonthly(sheet: Excel.Worksheet, results: BuildResult[]): void {

@@ -2,7 +2,7 @@ import { forecastFormula, lastNonMissing, nextMonth } from '../domain/forecast';
 import type { AreaWorkbookPlan, MonthlyAggregate, ProductionRecord } from '../models/types';
 import { appendDebug, createDebugEntry, ensureDebugSheet } from './debugSheet';
 import { areaSheetNames } from './names';
-import { addLineChart, getOrAddSheet, writeTable, writeTitle } from './sheetLayout';
+import { addLineChart, getOrAddSheet, writeMatrix, writeTable, writeTitle } from './sheetLayout';
 
 export async function writeAreaSheets(
   plan: AreaWorkbookPlan,
@@ -75,13 +75,13 @@ function writeHdpSheet(
 ): void {
   sheet.getRange().clear();
   writeTitle(sheet, `Historico de produccion - ${plan.selection.areaId}`, plan.selection.areaName);
-  sheet.getRange('A4:B8').values = [
+  writeMatrix(sheet, 'A4', [
     ['Provincia', plan.selection.province],
     ['Area', `${plan.selection.areaId} - ${plan.selection.areaName}`],
     ['Ultimo mes publicado', monthly.at(-1)?.date ?? 'Sin datos'],
     ['Warnings intermedios', warnings.length ? warnings.join(', ') : 'Sin warnings'],
     ['Politica faltantes intermedios', middleMissingPolicy],
-  ];
+  ], `Parametros HDP ${plan.selection.areaId}`);
 
   const headers = ['Fecha', 'Petroleo', 'Gas', 'Agua', 'Bruta', 'Agua iny.', 'Pozos petroleo', 'Pozos gas', 'Inyectores', 'Faltante'];
   const rows = monthly.map((m) => [
@@ -113,7 +113,7 @@ function writePronoSheet(
   const gas = override?.gasMethod ?? plan.defaults.gasMethod;
   const takeInitial = override?.takeInitialFromHistory ?? plan.defaults.takeInitialFromHistory;
 
-  sheet.getRange('A4:B10').values = [
+  writeMatrix(sheet, 'A4', [
     ['Metodo bruta', gross],
     ['Metodo petroleo', oil],
     ['Metodo gas', gas],
@@ -121,13 +121,13 @@ function writePronoSheet(
     ['Horizonte anos', plan.defaults.horizonYears],
     ['Inicio pronostico', nextMonth(monthly.at(-1)?.date)],
     ['Nota', 'Celdas de supuestos editables. Actualizar resumen desde el taskpane.'],
-  ];
+  ], `Parametros Prono ${plan.selection.areaId}`);
   sheet.getRange('B4').dataValidation.rule = { list: { inCellDropDown: true, source: 'Constante,HypMod,Declinación Hip.,Declinación Exp.' } };
   sheet.getRange('B5').dataValidation.rule = { list: { inCellDropDown: true, source: 'Constante,HypMod,Declinación Hip.,Declinación Exp.,Rap Np' } };
   sheet.getRange('B6').dataValidation.rule = { list: { inCellDropDown: true, source: 'Constante,HypMod,Declinación Hip.,Declinación Exp.,RGP' } };
   sheet.getRange('B7').dataValidation.rule = { list: { inCellDropDown: true, source: 'Si,No' } };
 
-  sheet.getRange('D4:E10').values = [
+  writeMatrix(sheet, 'D4', [
     ['Di bruta anual', 0.12],
     ['b bruta', 0.7],
     ['Di petroleo anual', 0.12],
@@ -135,7 +135,7 @@ function writePronoSheet(
     ['Di gas anual', 0.12],
     ['b gas', 0.7],
     ['RGP constante', (lastNonMissing(monthly, 'gas') / Math.max(lastNonMissing(monthly, 'oil'), 1)) * 1000],
-  ];
+  ], `Supuestos Prono ${plan.selection.areaId}`);
 
   const headers = ['Fecha', 'Petroleo hist.', 'Petroleo prono', 'Gas hist.', 'Gas prono', 'Bruta hist.', 'Bruta prono', 'Agua hist.', 'Agua prono', 'Wcut', 'RGP', 'RAP'];
   const rows: (string | number)[][] = monthly.map((m) => [
@@ -191,18 +191,18 @@ function writePozosSheet(
 ): void {
   sheet.getRange().clear();
   writeTitle(sheet, 'Pronostico de pozos', 'Cantidad historica y supuestos editables');
-  sheet.getRange('A4:B7').values = [
+  writeMatrix(sheet, 'A4', [
     ['Tomar pozos petroleo de historia', 'Si'],
     ['Tomar pozos gas de historia', 'Si'],
     ['Tomar inyectores de historia', 'Si'],
     ['Metodo', 'Declinacion exponencial'],
-  ];
+  ], `Parametros Pozos ${plan.selection.areaId}`);
   sheet.getRange('B4:B6').dataValidation.rule = { list: { inCellDropDown: true, source: 'Si,No' } };
-  sheet.getRange('D4:E6').values = [
+  writeMatrix(sheet, 'D4', [
     ['Di pozos petroleo anual', 0.04],
     ['Di pozos gas anual', 0.04],
     ['Di inyectores anual', 0.03],
-  ];
+  ], `Supuestos Pozos ${plan.selection.areaId}`);
 
   const headers = ['Fecha', 'Pozos petroleo', 'Pozos gas', 'Inyectores'];
   const rows = monthly.map((m) => [
