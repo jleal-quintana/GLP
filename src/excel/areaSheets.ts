@@ -20,39 +20,74 @@ export async function writeAreaSheets(
     await context.sync();
   });
 
-  await writeAreaSheet(plan.selection.areaId, 'HDP', async (context) => {
-    const hdp = await getOrAddSheet(context, areaSheetNames(plan.selection.areaId).hdp);
-    writeHdpSheet(hdp, plan, monthly, warnings, middleMissingPolicy);
+  const names = areaSheetNames(plan.selection.areaId);
+  await prepareAreaSheet(plan.selection.areaId, 'HDP', names.hdp);
+  await writeAreaSheetStep(plan.selection.areaId, 'HDP titulo', names.hdp, (hdp) => {
+    writeTitle(hdp, `Historico de produccion - ${plan.selection.areaId}`, plan.selection.areaName);
   });
-  await writeAreaSheet(plan.selection.areaId, 'Prono', async (context) => {
-    const prono = await getOrAddSheet(context, areaSheetNames(plan.selection.areaId).prono);
+  await writeAreaSheetStep(plan.selection.areaId, 'HDP parametros', names.hdp, (hdp) => {
+    writeHdpParams(hdp, plan, monthly, warnings, middleMissingPolicy);
+  });
+  await writeAreaSheetStep(plan.selection.areaId, 'HDP tabla', names.hdp, (hdp) => {
+    writeHdpTable(hdp, plan, monthly, middleMissingPolicy);
+  });
+
+  await writeAreaSheet(plan.selection.areaId, 'Prono', names.prono, async (prono) => {
     writePronoSheet(prono, plan, monthly, middleMissingPolicy);
   });
-  await writeAreaSheet(plan.selection.areaId, 'Pozos', async (context) => {
-    const pozos = await getOrAddSheet(context, areaSheetNames(plan.selection.areaId).pozos);
+  await writeAreaSheet(plan.selection.areaId, 'Pozos', names.pozos, async (pozos) => {
     writePozosSheet(pozos, plan, monthly, middleMissingPolicy);
   });
-  await writeAreaSheet(plan.selection.areaId, 'Detalle', async (context) => {
-    const detalle = await getOrAddSheet(context, areaSheetNames(plan.selection.areaId).detalle);
+  await writeAreaSheet(plan.selection.areaId, 'Detalle', names.detalle, async (detalle) => {
     writeDetailSheet(detalle, records);
   });
-  await writeAreaSheet(plan.selection.areaId, 'Graficos', async (context) => {
-    const graficos = await getOrAddSheet(context, areaSheetNames(plan.selection.areaId).graficos);
+  await writeAreaSheet(plan.selection.areaId, 'Graficos', names.graficos, async (graficos, context) => {
     writeChartsSheet(context, graficos, plan, monthly.length);
   });
 }
 
-async function writeAreaSheet(areaId: string, sheetStep: string, writer: (context: Excel.RequestContext) => Promise<void> | void): Promise<void> {
+async function writeAreaSheet(
+  areaId: string,
+  sheetStep: string,
+  sheetName: string,
+  writer: (sheet: Excel.Worksheet, context: Excel.RequestContext) => Promise<void> | void,
+): Promise<void> {
   await appendDebug(createDebugEntry(areaId, 'info', `Escribiendo hoja ${sheetStep}`));
   try {
-    await Excel.run(async (context) => {
-      await writer(context);
-      await context.sync();
-    });
+    await prepareAreaSheet(areaId, sheetStep, sheetName);
+    await writeAreaSheetStep(areaId, `${sheetStep} contenido`, sheetName, writer);
     await appendDebug(createDebugEntry(areaId, 'ok', `Hoja ${sheetStep} escrita`));
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     await appendDebug(createDebugEntry(areaId, 'error', `Fallo hoja ${sheetStep}: ${detail}`));
+    throw error;
+  }
+}
+
+async function prepareAreaSheet(areaId: string, sheetStep: string, sheetName: string): Promise<void> {
+  await writeAreaSheetStep(areaId, `${sheetStep} preparar`, sheetName, (sheet) => {
+    sheet.getRange().clear();
+    sheet.getRange('A1:H2').unmerge();
+  });
+}
+
+async function writeAreaSheetStep(
+  areaId: string,
+  step: string,
+  sheetName: string,
+  writer: (sheet: Excel.Worksheet, context: Excel.RequestContext) => Promise<void> | void,
+): Promise<void> {
+  await appendDebug(createDebugEntry(areaId, 'info', `Paso hoja ${step}`));
+  try {
+    await Excel.run(async (context) => {
+      const sheet = await getOrAddSheet(context, sheetName);
+      await writer(sheet, context);
+      await context.sync();
+    });
+    await appendDebug(createDebugEntry(areaId, 'ok', `Paso hoja ${step} ok`));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    await appendDebug(createDebugEntry(areaId, 'error', `Fallo paso hoja ${step}: ${detail}`));
     throw error;
   }
 }
@@ -73,8 +108,18 @@ function writeHdpSheet(
   warnings: string[],
   middleMissingPolicy: 'blank' | 'zero',
 ): void {
-  sheet.getRange().clear();
   writeTitle(sheet, `Historico de produccion - ${plan.selection.areaId}`, plan.selection.areaName);
+  writeHdpParams(sheet, plan, monthly, warnings, middleMissingPolicy);
+  writeHdpTable(sheet, plan, monthly, middleMissingPolicy);
+}
+
+function writeHdpParams(
+  sheet: Excel.Worksheet,
+  plan: AreaWorkbookPlan,
+  monthly: MonthlyAggregate[],
+  warnings: string[],
+  middleMissingPolicy: 'blank' | 'zero',
+): void {
   writeMatrix(sheet, 'A4', [
     ['Provincia', plan.selection.province],
     ['Area', `${plan.selection.areaId} - ${plan.selection.areaName}`],
@@ -82,7 +127,14 @@ function writeHdpSheet(
     ['Warnings intermedios', warnings.length ? warnings.join(', ') : 'Sin warnings'],
     ['Politica faltantes intermedios', middleMissingPolicy],
   ], `Parametros HDP ${plan.selection.areaId}`);
+}
 
+function writeHdpTable(
+  sheet: Excel.Worksheet,
+  plan: AreaWorkbookPlan,
+  monthly: MonthlyAggregate[],
+  middleMissingPolicy: 'blank' | 'zero',
+): void {
   const headers = ['Fecha', 'Petroleo', 'Gas', 'Agua', 'Bruta', 'Agua iny.', 'Pozos petroleo', 'Pozos gas', 'Inyectores', 'Faltante'];
   const rows = monthly.map((m) => [
     m.date,
@@ -105,7 +157,6 @@ function writePronoSheet(
   monthly: MonthlyAggregate[],
   middleMissingPolicy: 'blank' | 'zero',
 ): void {
-  sheet.getRange().clear();
   writeTitle(sheet, `Pronostico de produccion - ${plan.selection.areaId}`, plan.selection.areaName);
   const override = plan.override;
   const gross = override?.grossMethod ?? plan.defaults.grossMethod;
@@ -189,7 +240,6 @@ function writePozosSheet(
   monthly: MonthlyAggregate[],
   middleMissingPolicy: 'blank' | 'zero',
 ): void {
-  sheet.getRange().clear();
   writeTitle(sheet, 'Pronostico de pozos', 'Cantidad historica y supuestos editables');
   writeMatrix(sheet, 'A4', [
     ['Tomar pozos petroleo de historia', 'Si'],
@@ -234,7 +284,6 @@ function writePozosSheet(
 }
 
 function writeDetailSheet(sheet: Excel.Worksheet, records: ProductionRecord[]): void {
-  sheet.getRange().clear();
   writeTitle(sheet, 'Detalle Capitulo IV', 'Pozo-mes descargado');
   const headers = ['Anio', 'Mes', 'Area', 'Pozo', 'Id pozo', 'Petroleo', 'Gas', 'Agua', 'Agua iny.'];
   const rows = records.map((r) => [r.year, r.month, r.areaId, r.wellName, r.wellId, r.oil, r.gas, r.water, r.waterInjection]);
@@ -247,7 +296,6 @@ function writeChartsSheet(
   plan: AreaWorkbookPlan,
   historyMonths: number,
 ): void {
-  sheet.getRange().clear();
   writeTitle(sheet, `Graficos - ${plan.selection.areaId}`, 'Graficos nativos de Excel');
   const names = areaSheetNames(plan.selection.areaId);
   const prono = context.workbook.worksheets.getItem(names.prono);

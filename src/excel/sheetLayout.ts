@@ -12,7 +12,6 @@ export async function getOrAddSheet(context: Excel.RequestContext, name: string)
 }
 
 export function writeTitle(sheet: Excel.Worksheet, title: string, subtitle: string): void {
-  sheet.getRange('A1:H2').unmerge();
   writeMatrix(sheet, 'A1', [[title]], 'Titulo');
   sheet.getRange('A1').format.font.bold = true;
   sheet.getRange('A1').format.font.size = 16;
