@@ -21,3 +21,7 @@ Proceso de leer recursos de produccion convencional y no convencional, filtrar p
 ### Download Ledger
 
 Hoja visible del workbook donde GLP deja evidencia incremental de lo descargado por recurso para que el usuario vea avance y pueda auditar coincidencias.
+
+### Forecast Projection
+
+Proceso de extender la serie historica de un Area usando supuestos editables. Debe producir el mismo criterio para el resumen consolidado y para las formulas visibles que quedan en Excel.
