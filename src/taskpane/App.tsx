@@ -319,7 +319,7 @@ export function App() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <img src="/assets/branding/logo_isotipo.png" alt="Quintana Energy" />
+        <img src="assets/branding/logo_isotipo.png" alt="Quintana Energy" />
         <div className="brand-copy">
           <div className="product-line"><h1>CapIV</h1><span>v0.3</span></div>
           <p>Capítulo IV · Datos y pronósticos</p>

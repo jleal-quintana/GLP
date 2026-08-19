@@ -70,7 +70,7 @@ module.exports = async (_env, argv) => {
     output: {
       clean: true,
       path: path.resolve(__dirname, "dist"),
-      filename: "[name].bundle.js"
+      filename: "[name].bundle.[contenthash:8].js"
     },
     resolve: {
       extensions: [".ts", ".tsx", ".js"]
