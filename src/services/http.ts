@@ -33,6 +33,15 @@ export function catalogProxyUrl(): string | undefined {
   return `${proxyBase}${proxyBase.includes('?') ? '&' : '?'}catalog=1`;
 }
 
+export function resourceCatalogProxyUrl(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return undefined;
+  const proxyBase = typeof CAPIV_PROXY_BASE_URL === 'string' ? CAPIV_PROXY_BASE_URL.trim() : '';
+  if (!proxyBase) return undefined;
+  return `${proxyBase}${proxyBase.includes('?') ? '&' : '?'}resources=1`;
+}
+
 export function filteredProductionProxyUrl(url: string, areaId: string): string | undefined {
   if (typeof window === 'undefined') return undefined;
   const host = window.location.hostname;

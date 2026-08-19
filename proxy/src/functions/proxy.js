@@ -12,6 +12,7 @@ const DATASET_URL = 'https://datos.gob.ar/api/3/action/package_show?id=produccio
 const PRODUCTION_CONTAINER = 'production-cache';
 const CURRENT_YEAR_CACHE_MS = 6 * 60 * 60 * 1000;
 let catalogCache;
+let datasetCache;
 const productionCache = new Map();
 let productionContainerPromise;
 
@@ -45,6 +46,19 @@ app.http('proxy', {
         };
       } catch (error) {
         return { status: 502, headers: corsHeaders, body: `No se pudo preparar el catálogo: ${error.message}` };
+      }
+    }
+
+    if (request.query.get('resources') === '1') {
+      try {
+        const dataset = await loadDataset();
+        return {
+          status: 200,
+          headers: { ...corsHeaders, 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=900' },
+          jsonBody: dataset,
+        };
+      } catch (error) {
+        return { status: 502, headers: corsHeaders, body: `No se pudo consultar el índice oficial: ${error.message}` };
       }
     }
 
@@ -235,9 +249,7 @@ function productionYear(target) {
 
 async function buildAreaCatalog() {
   if (catalogCache && catalogCache.expiresAt > Date.now()) return catalogCache.value;
-  const datasetResponse = await fetchAllowed(validateTarget(DATASET_URL));
-  if (!datasetResponse.ok) throw new Error(`catálogo oficial HTTP ${datasetResponse.status}`);
-  const dataset = await datasetResponse.json();
+  const dataset = await loadDataset();
   const wells = (dataset.result?.resources || [])
     .filter((resource) => String(resource.format).toUpperCase() === 'CSV' && normalize(resource.name) === 'capitulo iv pozos')
     .sort((a, b) => String(b.last_modified || '').localeCompare(String(a.last_modified || '')))[0];
@@ -274,6 +286,18 @@ async function buildAreaCatalog() {
     .map((area) => ({ ...area, companies: [...area.companies] }))
     .sort((a, b) => `${a.province}|${a.areaName}`.localeCompare(`${b.province}|${b.areaName}`, 'es'));
   catalogCache = { value, expiresAt: Date.now() + 15 * 60 * 1000 };
+  return value;
+}
+
+async function loadDataset() {
+  if (datasetCache?.expiresAt > Date.now()) return datasetCache.value;
+  const response = await fetchAllowed(validateTarget(DATASET_URL));
+  if (!response.ok) throw new Error(`catálogo oficial HTTP ${response.status}`);
+  const value = await response.json();
+  if (!value?.success || !Array.isArray(value.result?.resources)) {
+    throw new Error('el catálogo oficial devolvió una respuesta inválida');
+  }
+  datasetCache = { value, expiresAt: Date.now() + 15 * 60 * 1000 };
   return value;
 }
 

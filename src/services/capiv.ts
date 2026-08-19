@@ -1,6 +1,6 @@
 import type { AreaCatalogItem, CapituloIvDownloadEventHandler, MonthlyAggregate, ProductionRecord } from '../models/types';
 import { parseCsv, parseCsvLine } from './csv';
-import { catalogProxyUrl, fetchWithRetry, filteredProductionProxyUrl } from './http';
+import { catalogProxyUrl, fetchWithRetry, filteredProductionProxyUrl, resourceCatalogProxyUrl } from './http';
 
 const API_ACTION_URL = 'https://datos.gob.ar/api/3/action';
 const DATASET_ID = 'produccion-de-petroleo-y-gas-por-pozo';
@@ -50,7 +50,9 @@ export function discoverCapivResources(resources: CkanResource[]): CapivResource
 async function loadResourceCatalog(): Promise<CapivResourceCatalog> {
   if (!resourceCatalogPromise) {
     resourceCatalogPromise = (async () => {
-      const response = await fetchWithRetry(`${API_ACTION_URL}/package_show?id=${DATASET_ID}`);
+      const response = await fetchWithRetry(
+        resourceCatalogProxyUrl() ?? `${API_ACTION_URL}/package_show?id=${DATASET_ID}`,
+      );
       if (!response.ok) throw new Error(`No se pudo consultar el catálogo oficial (HTTP ${response.status}).`);
       const data = await response.json();
       if (!data.success || !Array.isArray(data.result?.resources)) {
