@@ -1,21 +1,19 @@
-# Instalacion de GLP
+# Instalación de GLP en Excel
 
-El complemento corre en GitHub Pages. Lo que se instala en Excel es un manifest que le dice a Excel donde cargar el panel.
+El usuario sólo necesita Excel de escritorio, conexión a internet y `glp-installer.zip`.
 
-## Descargar
-
-**[glp-installer.zip](https://github.com/jleal-quintana/GLP/raw/main/tutorial/glp-installer.zip)**
-
-## Instalar
-
-1. Descargar `glp-installer.zip`.
-2. Click derecho en el zip y elegir **Extraer todo...**.
-3. Ejecutar `instalar.bat`.
-4. Cerrar Excel completamente.
+1. Descargar `glp-installer.zip` desde el enlace oficial.
+2. Hacer clic derecho y elegir **Extraer todo**.
+3. Cerrar Excel completamente.
+4. Ejecutar `instalar.bat` y esperar el mensaje de instalación completada.
 5. Abrir Excel con un libro nuevo.
-6. Ir a **Inicio > Add-ins > More Add-ins > Developer Add-ins**.
-7. Elegir **GLP**.
+6. Ir a **Inicio > Complementos > Más complementos > Complementos de desarrollador**.
+7. Seleccionar **GLP**.
 
-## Desinstalar
+Para quitarlo, cerrar Excel y ejecutar `desinstalar.bat` desde la misma carpeta extraída.
 
-Ejecutar `desinstalar.bat` desde la misma carpeta extraida.
+## Actualizar un libro existente
+
+Abrir el mismo archivo de Excel y pulsar **Actualizar libro** al comienzo del panel. GLP detecta automáticamente las áreas ya generadas, incorpora meses nuevos y conserva los supuestos editados.
+
+La guía completa está en `output/pdf/GLP_Tutorial_Lanzamiento.pdf`.

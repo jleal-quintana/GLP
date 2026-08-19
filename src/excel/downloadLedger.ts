@@ -11,8 +11,8 @@ export async function ensureDownloadLedger(plan: AreaWorkbookPlan): Promise<void
     await context.sync();
 
     if (used.isNullObject) {
-      writeTitle(sheet, 'Descarga Capitulo IV', 'Resumen incremental por recurso descargado');
-      const headers = ['Timestamp', 'Area', 'Nombre', 'Evento', 'Fuente', 'Anio recurso', 'Filas leidas', 'Filas area', 'Petroleo', 'Gas', 'Agua', 'Agua iny.'];
+      writeTitle(sheet, 'Descarga Capítulo IV', 'Resumen incremental por recurso descargado');
+      const headers = ['Timestamp', 'Área', 'Nombre', 'Evento', 'Fuente', 'Año recurso', 'Filas leídas', 'Filas área', 'Petróleo', 'Gas', 'Agua', 'Agua iny.'];
       writeTable(sheet, 'A4:L4', headers, [], 'Descarga Capitulo IV');
       sheet.freezePanes.freezeRows(4);
     }

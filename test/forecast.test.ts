@@ -41,4 +41,10 @@ describe('forecast projection', () => {
   it('can express RGP gas as a function of the current oil forecast row', () => {
     expect(forecastFormula('B6', 100, 'E8', 'E9', 1, 'E10', 'C13')).toContain('IF(B6="RGP",E10*C13/1000');
   });
+
+  it('can switch between a historical and an editable manual initial value', () => {
+    expect(forecastFormula('B5', 'IF($B$7="Sí",100,$H$5)', 'E6', 'E7', 1)).toContain(
+      'IF($B$7="Sí",100,$H$5)',
+    );
+  });
 });

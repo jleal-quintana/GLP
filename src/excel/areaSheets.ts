@@ -4,6 +4,18 @@ import { appendDebug, createDebugEntry, ensureDebugSheet } from './debugSheet';
 import { areaSheetNames } from './names';
 import { addLineChart, getOrAddSheet, writeMatrix, writeTable, writeTitle } from './sheetLayout';
 
+interface PreservedSettings {
+  prono?: {
+    methods: (string | number)[][];
+    decline: (string | number)[][];
+    initials: (string | number)[][];
+  };
+  pozos?: {
+    switches: (string | number)[][];
+    decline: (string | number)[][];
+  };
+}
+
 export async function writeAreaSheets(
   plan: AreaWorkbookPlan,
   records: ProductionRecord[],
@@ -11,19 +23,18 @@ export async function writeAreaSheets(
   warnings: string[],
   middleMissingPolicy: 'blank' | 'zero',
 ): Promise<void> {
+  const names = areaSheetNames(plan.selection.areaId);
+  const preserved = plan.mode === 'update' ? await readExistingSettings(names.prono, names.pozos) : undefined;
   await Excel.run(async (context) => {
     await ensureDebugSheet(context);
-    const names = areaSheetNames(plan.selection.areaId);
     if (plan.mode === 'regenerate') {
       await deleteIfExists(context, Object.values(names));
     }
     await context.sync();
   });
-
-  const names = areaSheetNames(plan.selection.areaId);
   await prepareAreaSheet(plan.selection.areaId, 'HDP', names.hdp);
   await writeAreaSheetStep(plan.selection.areaId, 'HDP titulo', names.hdp, (hdp) => {
-    writeTitle(hdp, `Historico de produccion - ${plan.selection.areaId}`, plan.selection.areaName);
+    writeTitle(hdp, `Histórico de producción - ${plan.selection.areaId}`, plan.selection.areaName);
   });
   await writeAreaSheetStep(plan.selection.areaId, 'HDP parametros', names.hdp, (hdp) => {
     writeHdpParams(hdp, plan, monthly, warnings, middleMissingPolicy);
@@ -34,9 +45,11 @@ export async function writeAreaSheets(
 
   await writeAreaSheet(plan.selection.areaId, 'Prono', names.prono, async (prono) => {
     writePronoSheet(prono, plan, monthly, middleMissingPolicy);
+    if (preserved?.prono) restorePronoSettings(prono, preserved.prono);
   });
   await writeAreaSheet(plan.selection.areaId, 'Pozos', names.pozos, async (pozos) => {
     writePozosSheet(pozos, plan, monthly, middleMissingPolicy);
+    if (preserved?.pozos) restorePozosSettings(pozos, preserved.pozos);
   });
   await writeAreaSheet(plan.selection.areaId, 'Detalle', names.detalle, async (detalle) => {
     writeDetailSheet(detalle, records);
@@ -44,6 +57,48 @@ export async function writeAreaSheets(
   await writeAreaSheet(plan.selection.areaId, 'Graficos', names.graficos, async (graficos, context) => {
     writeChartsSheet(context, graficos, plan, monthly.length);
   });
+}
+
+async function readExistingSettings(pronoName: string, pozosName: string): Promise<PreservedSettings> {
+  return Excel.run(async (context) => {
+    const output: PreservedSettings = {};
+    const prono = context.workbook.worksheets.getItemOrNullObject(pronoName);
+    const pozos = context.workbook.worksheets.getItemOrNullObject(pozosName);
+    prono.load('name');
+    pozos.load('name');
+    await context.sync();
+
+    if (!prono.isNullObject) {
+      const methods = prono.getRange('B4:B7');
+      const decline = prono.getRange('E4:E10');
+      const initials = prono.getRange('H4:H6');
+      methods.load('values');
+      decline.load('values');
+      initials.load('values');
+      await context.sync();
+      output.prono = { methods: methods.values, decline: decline.values, initials: initials.values };
+    }
+    if (!pozos.isNullObject) {
+      const switches = pozos.getRange('B4:B6');
+      const decline = pozos.getRange('E4:E6');
+      switches.load('values');
+      decline.load('values');
+      await context.sync();
+      output.pozos = { switches: switches.values, decline: decline.values };
+    }
+    return output;
+  });
+}
+
+function restorePronoSettings(sheet: Excel.Worksheet, settings: NonNullable<PreservedSettings['prono']>): void {
+  sheet.getRange('B4:B7').values = settings.methods;
+  sheet.getRange('E4:E10').values = settings.decline;
+  sheet.getRange('H4:H6').values = settings.initials;
+}
+
+function restorePozosSettings(sheet: Excel.Worksheet, settings: NonNullable<PreservedSettings['pozos']>): void {
+  sheet.getRange('B4:B6').values = settings.switches;
+  sheet.getRange('E4:E6').values = settings.decline;
 }
 
 async function writeAreaSheet(
@@ -108,7 +163,7 @@ function writeHdpSheet(
   warnings: string[],
   middleMissingPolicy: 'blank' | 'zero',
 ): void {
-  writeTitle(sheet, `Historico de produccion - ${plan.selection.areaId}`, plan.selection.areaName);
+  writeTitle(sheet, `Histórico de producción - ${plan.selection.areaId}`, plan.selection.areaName);
   writeHdpParams(sheet, plan, monthly, warnings, middleMissingPolicy);
   writeHdpTable(sheet, plan, monthly, middleMissingPolicy);
 }
@@ -123,10 +178,10 @@ function writeHdpParams(
   writeMatrix(sheet, 'A4', [
     ['Provincia', plan.selection.province],
     ['Area', `${plan.selection.areaId} - ${plan.selection.areaName}`],
-    ['Ultimo mes publicado', monthly.at(-1)?.date ?? 'Sin datos'],
-    ['Warnings intermedios', warnings.length ? warnings.join(', ') : 'Sin warnings'],
-    ['Politica faltantes intermedios', middleMissingPolicy],
-  ], `Parametros HDP ${plan.selection.areaId}`);
+    ['Último mes publicado', monthly.at(-1)?.date ?? 'Sin datos'],
+    ['Advertencias intermedias', warnings.length ? warnings.join(', ') : 'Sin advertencias'],
+    ['Política de faltantes', warnings.length ? (middleMissingPolicy === 'blank' ? 'Vacío' : 'Cero') : 'No aplica'],
+  ], `Parámetros HDP ${plan.selection.areaId}`);
 }
 
 function writeHdpTable(
@@ -135,7 +190,7 @@ function writeHdpTable(
   monthly: MonthlyAggregate[],
   middleMissingPolicy: 'blank' | 'zero',
 ): void {
-  const headers = ['Fecha', 'Petroleo', 'Gas', 'Agua', 'Bruta', 'Agua iny.', 'Pozos petroleo', 'Pozos gas', 'Inyectores', 'Faltante'];
+  const headers = ['Fecha', 'Petróleo', 'Gas', 'Agua', 'Bruta', 'Agua iny.', 'Pozos petróleo', 'Pozos gas', 'Inyectores', 'Faltante'];
   const rows = monthly.map((m) => [
     m.date,
     maybeBlank(m, m.oil, middleMissingPolicy),
@@ -149,6 +204,7 @@ function writeHdpTable(
     m.missingKind === 'leading' ? 'Inicio' : m.missingKind === 'middle' ? 'Intermedio' : '',
   ]);
   writeTable(sheet, 'A9:J9', headers, rows, `HDP ${plan.selection.areaId}`);
+  sheet.freezePanes.freezeRows(9);
 }
 
 function writePronoSheet(
@@ -157,7 +213,7 @@ function writePronoSheet(
   monthly: MonthlyAggregate[],
   middleMissingPolicy: 'blank' | 'zero',
 ): void {
-  writeTitle(sheet, `Pronostico de produccion - ${plan.selection.areaId}`, plan.selection.areaName);
+  writeTitle(sheet, `Pronóstico de producción - ${plan.selection.areaId}`, plan.selection.areaName);
   const override = plan.override;
   const gross = override?.grossMethod ?? plan.defaults.grossMethod;
   const oil = override?.oilMethod ?? plan.defaults.oilMethod;
@@ -165,30 +221,39 @@ function writePronoSheet(
   const takeInitial = override?.takeInitialFromHistory ?? plan.defaults.takeInitialFromHistory;
 
   writeMatrix(sheet, 'A4', [
-    ['Metodo bruta', gross],
-    ['Metodo petroleo', oil],
-    ['Metodo gas', gas],
-    ['Tomar inicial de historia', takeInitial ? 'Si' : 'No'],
-    ['Horizonte anos', plan.defaults.horizonYears],
-    ['Inicio pronostico', nextMonth(monthly.at(-1)?.date)],
+    ['Método bruta', gross],
+    ['Método petróleo', oil],
+    ['Método gas', gas],
+    ['Tomar inicial de historia', takeInitial ? 'Sí' : 'No'],
+    ['Horizonte años', plan.defaults.horizonYears],
+    ['Inicio pronóstico', nextMonth(monthly.at(-1)?.date)],
     ['Nota', 'Celdas de supuestos editables. Actualizar resumen desde el taskpane.'],
   ], `Parametros Prono ${plan.selection.areaId}`);
   sheet.getRange('B4').dataValidation.rule = { list: { inCellDropDown: true, source: 'Constante,HypMod,Declinación Hip.,Declinación Exp.' } };
   sheet.getRange('B5').dataValidation.rule = { list: { inCellDropDown: true, source: 'Constante,HypMod,Declinación Hip.,Declinación Exp.,Rap Np' } };
   sheet.getRange('B6').dataValidation.rule = { list: { inCellDropDown: true, source: 'Constante,HypMod,Declinación Hip.,Declinación Exp.,RGP' } };
-  sheet.getRange('B7').dataValidation.rule = { list: { inCellDropDown: true, source: 'Si,No' } };
+  sheet.getRange('B7').dataValidation.rule = { list: { inCellDropDown: true, source: 'Sí,No' } };
 
   writeMatrix(sheet, 'D4', [
     ['Di bruta anual', 0.12],
     ['b bruta', 0.7],
-    ['Di petroleo anual', 0.12],
-    ['b petroleo', 0.7],
+    ['Di petróleo anual', 0.12],
+    ['b petróleo', 0.7],
     ['Di gas anual', 0.12],
     ['b gas', 0.7],
     ['RGP constante', (lastNonMissing(monthly, 'gas') / Math.max(lastNonMissing(monthly, 'oil'), 1)) * 1000],
   ], `Supuestos Prono ${plan.selection.areaId}`);
 
-  const headers = ['Fecha', 'Petroleo hist.', 'Petroleo prono', 'Gas hist.', 'Gas prono', 'Bruta hist.', 'Bruta prono', 'Agua hist.', 'Agua prono', 'Wcut', 'RGP', 'RAP'];
+  const lastOil = lastNonMissing(monthly, 'oil');
+  const lastGas = lastNonMissing(monthly, 'gas');
+  const lastGross = lastNonMissing(monthly, 'gross');
+  writeMatrix(sheet, 'G4', [
+    ['Inicial bruta manual', lastGross],
+    ['Inicial petróleo manual', lastOil],
+    ['Inicial gas manual', lastGas],
+  ], `Iniciales Prono ${plan.selection.areaId}`);
+
+  const headers = ['Fecha', 'Petróleo hist.', 'Petróleo prono', 'Gas hist.', 'Gas prono', 'Bruta hist.', 'Bruta prono', 'Agua hist.', 'Agua prono', 'Wcut', 'RGP', 'RAP'];
   const rows: (string | number)[][] = monthly.map((m) => [
     m.date,
     maybeBlank(m, m.oil, middleMissingPolicy),
@@ -207,9 +272,9 @@ function writePronoSheet(
   if (last) {
     const start = new Date(`${last.date}T00:00:00`);
     const months = plan.defaults.horizonYears * 12;
-    const lastOil = lastNonMissing(monthly, 'oil');
-    const lastGas = lastNonMissing(monthly, 'gas');
-    const lastGross = lastNonMissing(monthly, 'gross');
+    const oilInitial = `IF($B$7="Sí",${lastOil},$H$5)`;
+    const gasInitial = `IF($B$7="Sí",${lastGas},$H$6)`;
+    const grossInitial = `IF($B$7="Sí",${lastGross},$H$4)`;
     for (let i = 1; i <= months; i++) {
       const date = new Date(start);
       date.setMonth(date.getMonth() + i);
@@ -218,11 +283,11 @@ function writePronoSheet(
       rows.push([
         date.toISOString().slice(0, 10),
         '',
-        forecastFormula('B5', lastOil, 'E6', 'E7', tYears),
+        forecastFormula('B5', oilInitial, 'E6', 'E7', tYears),
         '',
-        forecastFormula('B6', lastGas, 'E8', 'E9', tYears, 'E10', `C${rowNumber}`),
+        forecastFormula('B6', gasInitial, 'E8', 'E9', tYears, 'E10', `C${rowNumber}`),
         '',
-        forecastFormula('B4', lastGross, 'E4', 'E5', tYears),
+        forecastFormula('B4', grossInitial, 'E4', 'E5', tYears),
         '',
         `=MAX(G${rowNumber}-C${rowNumber},0)`,
         `=IF(G${rowNumber}>0,I${rowNumber}/G${rowNumber},"")`,
@@ -232,6 +297,7 @@ function writePronoSheet(
     }
   }
   writeTable(sheet, 'A12:L12', headers, rows, `Prono ${plan.selection.areaId}`);
+  sheet.freezePanes.freezeRows(12);
 }
 
 function writePozosSheet(
@@ -240,21 +306,21 @@ function writePozosSheet(
   monthly: MonthlyAggregate[],
   middleMissingPolicy: 'blank' | 'zero',
 ): void {
-  writeTitle(sheet, 'Pronostico de pozos', 'Cantidad historica y supuestos editables');
+  writeTitle(sheet, 'Pronóstico de pozos', 'Cantidad histórica y supuestos editables');
   writeMatrix(sheet, 'A4', [
-    ['Tomar pozos petroleo de historia', 'Si'],
-    ['Tomar pozos gas de historia', 'Si'],
-    ['Tomar inyectores de historia', 'Si'],
-    ['Metodo', 'Declinacion exponencial'],
+    ['Tomar pozos petróleo de historia', 'Sí'],
+    ['Tomar pozos gas de historia', 'Sí'],
+    ['Tomar inyectores de historia', 'Sí'],
+    ['Método', 'Declinación exponencial'],
   ], `Parametros Pozos ${plan.selection.areaId}`);
-  sheet.getRange('B4:B6').dataValidation.rule = { list: { inCellDropDown: true, source: 'Si,No' } };
+  sheet.getRange('B4:B6').dataValidation.rule = { list: { inCellDropDown: true, source: 'Sí,No' } };
   writeMatrix(sheet, 'D4', [
-    ['Di pozos petroleo anual', 0.04],
+    ['Di pozos petróleo anual', 0.04],
     ['Di pozos gas anual', 0.04],
     ['Di inyectores anual', 0.03],
   ], `Supuestos Pozos ${plan.selection.areaId}`);
 
-  const headers = ['Fecha', 'Pozos petroleo', 'Pozos gas', 'Inyectores'];
+  const headers = ['Fecha', 'Pozos petróleo', 'Pozos gas', 'Inyectores'];
   const rows = monthly.map((m) => [
     m.date,
     maybeBlank(m, m.oilWells, middleMissingPolicy),
@@ -274,20 +340,22 @@ function writePozosSheet(
       const t = Number((i / 12).toFixed(6));
       rows.push([
         date.toISOString().slice(0, 10),
-        `=IF($B$4="Si",${lastOilWells}*EXP(-$E$4*${t}),${lastOilWells})`,
-        `=IF($B$5="Si",${lastGasWells}*EXP(-$E$5*${t}),${lastGasWells})`,
-        `=IF($B$6="Si",${lastInjectors}*EXP(-$E$6*${t}),${lastInjectors})`,
+        `=IF($B$4="Sí",${lastOilWells}*EXP(-$E$4*${t}),${lastOilWells})`,
+        `=IF($B$5="Sí",${lastGasWells}*EXP(-$E$5*${t}),${lastGasWells})`,
+        `=IF($B$6="Sí",${lastInjectors}*EXP(-$E$6*${t}),${lastInjectors})`,
       ]);
     }
   }
   writeTable(sheet, 'A9:D9', headers, rows, 'Prono Pozos');
+  sheet.freezePanes.freezeRows(9);
 }
 
 function writeDetailSheet(sheet: Excel.Worksheet, records: ProductionRecord[]): void {
-  writeTitle(sheet, 'Detalle Capitulo IV', 'Pozo-mes descargado');
-  const headers = ['Anio', 'Mes', 'Area', 'Pozo', 'Id pozo', 'Petroleo', 'Gas', 'Agua', 'Agua iny.'];
+  writeTitle(sheet, 'Detalle Capítulo IV', 'Pozo-mes descargado');
+  const headers = ['Año', 'Mes', 'Área', 'Pozo', 'Id pozo', 'Petróleo', 'Gas', 'Agua', 'Agua iny.'];
   const rows = records.map((r) => [r.year, r.month, r.areaId, r.wellName, r.wellId, r.oil, r.gas, r.water, r.waterInjection]);
   writeTable(sheet, 'A4:I4', headers, rows, 'Detalle Capitulo IV');
+  sheet.freezePanes.freezeRows(4);
 }
 
 function writeChartsSheet(
@@ -296,14 +364,14 @@ function writeChartsSheet(
   plan: AreaWorkbookPlan,
   historyMonths: number,
 ): void {
-  writeTitle(sheet, `Graficos - ${plan.selection.areaId}`, 'Graficos nativos de Excel');
+  writeTitle(sheet, `Gráficos - ${plan.selection.areaId}`, 'Gráficos nativos de Excel');
   const names = areaSheetNames(plan.selection.areaId);
   const prono = context.workbook.worksheets.getItem(names.prono);
   const pozos = context.workbook.worksheets.getItem(names.pozos);
   const forecastMonths = plan.defaults.horizonYears * 12;
   const pronoRows = Math.max(2, historyMonths + forecastMonths + 1);
   const pozosRows = Math.max(2, historyMonths + forecastMonths + 1);
-  addLineChart(sheet, prono.getRangeByIndexes(11, 0, pronoRows, 3), 'Petroleo', 'A4', 'H22');
+  addLineChart(sheet, prono.getRangeByIndexes(11, 0, pronoRows, 3), 'Petróleo', 'A4', 'H22');
   addLineChart(sheet, prono.getRangeByIndexes(11, 0, pronoRows, 5), 'Gas', 'I4', 'P22');
   addLineChart(sheet, prono.getRangeByIndexes(11, 0, pronoRows, 7), 'Bruta', 'A24', 'H42');
   addLineChart(sheet, prono.getRangeByIndexes(11, 0, pronoRows, 12), 'Ratios', 'I24', 'P42');

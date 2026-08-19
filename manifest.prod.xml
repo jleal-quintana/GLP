@@ -5,11 +5,11 @@
   xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
   xsi:type="TaskPaneApp">
   <Id>6fd19b4b-12f0-4fb7-86fe-3eeb5efb7f20</Id>
-  <Version>1.0.0.0</Version>
+  <Version>1.1.0.0</Version>
   <ProviderName>Quintana Energy</ProviderName>
   <DefaultLocale>es-AR</DefaultLocale>
   <DisplayName DefaultValue="GLP" />
-  <Description DefaultValue="Add-in de Excel para descargar historico Capitulo IV, proyectar areas y generar graficos." />
+  <Description DefaultValue="Add-in de Excel para descargar el histórico de Capítulo IV, proyectar áreas y generar gráficos." />
   <IconUrl DefaultValue="https://jleal-quintana.github.io/GLP/assets/icon-32.png" />
   <HighResolutionIconUrl DefaultValue="https://jleal-quintana.github.io/GLP/assets/icon-80.png" />
   <SupportUrl DefaultValue="https://jleal-quintana.github.io/GLP/taskpane.html" />

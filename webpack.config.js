@@ -3,6 +3,7 @@ const http = require("http");
 const https = require("https");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
+const webpack = require("webpack");
 const { getHttpsServerOptions } = require("office-addin-dev-certs");
 
 function proxyCapivRequest(req, res) {
@@ -88,6 +89,9 @@ module.exports = async (_env, argv) => {
       ]
     },
     plugins: [
+      new webpack.DefinePlugin({
+        CAPIV_PROXY_BASE_URL: JSON.stringify(process.env.CAPIV_PROXY_BASE_URL || "")
+      }),
       new HtmlWebpackPlugin({
         filename: "taskpane.html",
         template: "./src/taskpane/index.html",
@@ -101,7 +105,10 @@ module.exports = async (_env, argv) => {
       new CopyWebpackPlugin({
         patterns: [
           { from: "manifest.xml", to: "manifest.xml" },
-          { from: "assets", to: "assets", noErrorOnMissing: false }
+          { from: "assets", to: "assets", noErrorOnMissing: false },
+          { from: "tutorial/instalacion.html", to: "instalacion.html" },
+          { from: "tutorial/glp-installer.zip", to: "glp-installer.zip" },
+          { from: "output/pdf/GLP_Tutorial_Lanzamiento.pdf", to: "GLP_Tutorial_Lanzamiento.pdf" }
         ]
       })
     ],

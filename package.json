@@ -1,6 +1,6 @@
 {
   "name": "cap-iv-addin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Excel add-in for Capitulo IV production history, forecasts, and charts.",
   "scripts": {
@@ -10,6 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "validate": "office-addin-manifest validate manifest.xml",
+    "validate:prod": "office-addin-manifest validate manifest.prod.xml",
+    "check": "tsc --noEmit && npm run test && npm run validate && npm run validate:prod && npm run build",
     "start:desktop": "office-addin-debugging start manifest.xml desktop --app excel --dev-server \"npm run dev:server\" --dev-server-port 3002",
     "start:desktop:devtools": "office-addin-debugging start manifest.xml desktop --app excel --dev-tools --dev-server \"npm run dev:server\" --dev-server-port 3002",
     "stop:desktop": "office-addin-debugging stop manifest.xml desktop"

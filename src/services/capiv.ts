@@ -3,66 +3,74 @@ import { parseCsv, parseCsvLine } from './csv';
 import { fetchWithRetry } from './http';
 
 const API_ACTION_URL = 'https://datos.gob.ar/api/3/action';
-const WELLS_CAP_IV_RESOURCE = 'energia_cb5c0f04-7835-45cd-b982-3e25ca7d7751';
-
-const PROD_RESOURCE_BY_YEAR: Record<number, string> = {
-  2026: 'energia_fb7a47a0-cba9-4667-a004-6f6c1c346c23',
-  2025: 'energia_d774b5d7-0756-48fe-88f2-8729b57b22da',
-  2024: 'energia_43a09dce-1742-44d0-bc13-f193deaab563',
-  2023: 'energia_231c39b3-e81e-4398-af8d-b115807f2c25',
-  2022: 'energia_876b3746-85e2-4039-adeb-b1354436159f',
-  2021: 'energia_465be754-a372-4c31-b855-81dc5fe3309f',
-  2020: 'energia_c4a4a6a0-e75a-4e12-ae5c-54d53a70348c',
-  2019: 'energia_8bc0d61c-0408-43d4-a7bc-7178fcb5d37e',
-  2018: 'energia_333fd72a-9b83-4bc1-bc94-0f5940b52331',
-  2017: 'energia_df4857e1-7c3f-4980-b5b5-184fe78bfcf0',
-  2016: 'energia_d8539ae8-0a71-4339-a16c-139b21bd2cd0',
-  2015: 'energia_e375aa35-fd8d-41d6-aa0c-e6879ca567a1',
-  2014: 'energia_cd9813a7-1e19-4f60-a02a-7903dd81aff7',
-  2013: 'energia_bc7ac8fe-2cec-4dab-acdd-322ea1ccc887',
-  2012: 'energia_0dce0e75-1556-47ee-8615-1955fbd54ade',
-  2011: 'energia_4817272c-7365-4bdd-b02d-75b118218b10',
-  2010: 'energia_364ca28e-d069-4bd6-8771-925f0db152a8',
-  2009: 'energia_48585038-055a-4437-bb1d-4fe36073f453',
-  2008: 'energia_3430b5a8-a516-42ca-a47d-2e1ce45925fb',
-  2007: 'energia_be663a63-f020-4e28-8f31-c5f81d47554d',
-  2006: 'energia_4e1c55e5-1f1b-4fc8-aa37-2080d9795f29',
-};
-
-const NC_PRODUCTION_RESOURCE = 'energia_b5b58cdc-9e07-41f9-b392-fb9ec68b0725';
-const urlCache = new Map<string, Promise<string>>();
+const DATASET_ID = 'produccion-de-petroleo-y-gas-por-pozo';
 const DOWNLOAD_PAUSE_MS = 250;
 
-async function getResourceDownloadUrl(resourceId: string): Promise<string> {
-  const cached = urlCache.get(resourceId);
-  if (cached) return cached;
-  const request = getResourceDownloadUrlUncached(resourceId);
-  urlCache.set(resourceId, request);
-  return request;
+interface CkanResource {
+  id: string;
+  name: string;
+  format?: string;
+  url: string;
+  last_modified?: string;
 }
 
-async function getResourceDownloadUrlUncached(resourceId: string): Promise<string> {
-  const response = await fetchWithRetry(`${API_ACTION_URL}/resource_show?id=${resourceId}`);
-  if (!response.ok) throw new Error(`resource_show failed ${response.status} for ${resourceId}`);
-  const data = await response.json();
-  if (!data.success || !data.result?.url) throw new Error(`resource_show returned no url for ${resourceId}`);
-  return String(data.result.url);
+export interface CapivResourceCatalog {
+  wells: CkanResource;
+  productionByYear: Record<number, CkanResource>;
 }
 
-async function downloadResourceCsv(resourceId: string): Promise<Record<string, string>[]> {
-  const url = await getResourceDownloadUrl(resourceId);
-  const response = await fetchWithRetry(url);
-  if (!response.ok) throw new Error(`CSV download failed ${response.status} for ${resourceId}`);
-  return parseCsv(await response.text());
+let resourceCatalogPromise: Promise<CapivResourceCatalog> | undefined;
+
+export function discoverCapivResources(resources: CkanResource[]): CapivResourceCatalog {
+  const csvResources = resources.filter((resource) => resource.format?.toUpperCase() === 'CSV');
+  const wells = newestResource(csvResources.filter((resource) => normalize(resource.name) === 'capitulo iv pozos'));
+  if (!wells) throw new Error('El catálogo oficial no publicó el recurso CSV "Capítulo IV - Pozos".');
+
+  const candidatesByYear = new Map<number, CkanResource[]>();
+  for (const resource of csvResources) {
+    const normalizedName = normalize(resource.name);
+    if (!normalizedName.includes('produccion de pozos de gas y petroleo')) continue;
+    if (normalizedName.includes('ddjj abiertas y cerradas') || normalizedName.includes('no convencional')) continue;
+    const match = normalizedName.match(/\b(20\d{2}|19\d{2})\b/);
+    if (!match) continue;
+    const year = Number(match[1]);
+    const current = candidatesByYear.get(year) ?? [];
+    current.push(resource);
+    candidatesByYear.set(year, current);
+  }
+
+  const productionByYear: Record<number, CkanResource> = {};
+  for (const [year, candidates] of candidatesByYear) {
+    const selected = newestResource(candidates);
+    if (selected) productionByYear[year] = selected;
+  }
+  return { wells, productionByYear };
+}
+
+async function loadResourceCatalog(): Promise<CapivResourceCatalog> {
+  if (!resourceCatalogPromise) {
+    resourceCatalogPromise = (async () => {
+      const response = await fetchWithRetry(`${API_ACTION_URL}/package_show?id=${DATASET_ID}`);
+      if (!response.ok) throw new Error(`No se pudo consultar el catálogo oficial (HTTP ${response.status}).`);
+      const data = await response.json();
+      if (!data.success || !Array.isArray(data.result?.resources)) {
+        throw new Error('El catálogo oficial devolvió una respuesta inválida.');
+      }
+      return discoverCapivResources(data.result.resources as CkanResource[]);
+    })().catch((error) => {
+      resourceCatalogPromise = undefined;
+      throw error;
+    });
+  }
+  return resourceCatalogPromise;
 }
 
 async function streamResourceCsv(
-  resourceId: string,
+  resource: CkanResource,
   onRecord: (record: Record<string, string>) => void,
 ): Promise<number> {
-  const url = await getResourceDownloadUrl(resourceId);
-  const response = await fetchWithRetry(url);
-  if (!response.ok) throw new Error(`CSV download failed ${response.status} for ${resourceId}`);
+  const response = await fetchWithRetry(resource.url);
+  if (!response.ok) throw new Error(`No se pudo descargar ${resource.name} (HTTP ${response.status}).`);
 
   if (!response.body) {
     const records = parseCsv(await response.text());
@@ -133,19 +141,18 @@ function numberValue(record: Record<string, string>, ...keys: string[]): number 
 }
 
 export async function fetchAreaCatalog(): Promise<AreaCatalogItem[]> {
-  const records = await downloadResourceCsv(WELLS_CAP_IV_RESOURCE);
+  const resources = await loadResourceCatalog();
   const byArea = new Map<string, AreaCatalogItem>();
-
-  for (const record of records) {
+  await streamResourceCsv(resources.wells, (record) => {
     const areaId = text(record, 'cod_area', 'idareapermisoconcesion');
     const areaName = text(record, 'area', 'areapermisoconcesion');
-    if (!areaId || !areaName) continue;
+    if (!areaId || !areaName) return;
 
     const existing = byArea.get(areaId);
     const company = text(record, 'empresa');
     if (existing) {
       if (company && !existing.companies.includes(company)) existing.companies.push(company);
-      continue;
+      return;
     }
 
     byArea.set(areaId, {
@@ -155,7 +162,7 @@ export async function fetchAreaCatalog(): Promise<AreaCatalogItem[]> {
       basin: text(record, 'cuenca'),
       companies: company ? [company] : [],
     });
-  }
+  });
 
   return [...byArea.values()].sort((a, b) =>
     `${a.province}|${a.areaName}`.localeCompare(`${b.province}|${b.areaName}`, 'es'),
@@ -194,61 +201,40 @@ export async function fetchAreaProduction(
   const currentYear = new Date().getFullYear();
   const records: ProductionRecord[] = [];
   const seen = new Set<string>();
+  const resources = await loadResourceCatalog();
 
   for (let year = startYear; year <= currentYear; year++) {
-    const resourceId = PROD_RESOURCE_BY_YEAR[year];
-    if (!resourceId) continue;
+    const resource = resources.productionByYear[year];
+    if (!resource) {
+      onStep?.(`Sin recurso anual publicado para ${year}; se continúa con el siguiente año`);
+      continue;
+    }
     await delay(DOWNLOAD_PAUSE_MS);
-    onStep?.(`Descargando produccion convencional ${area.areaId} ${year}`);
-    await onEvent?.({ type: 'resource_started', areaId: area.areaId, source: 'convencional', year });
+    onStep?.(`Descargando Capítulo IV ${area.areaId} ${year}`);
+    await onEvent?.({ type: 'resource_started', areaId: area.areaId, source: 'capitulo-iv', year });
     let matched = 0;
     const matchedRows: ProductionRecord[] = [];
-    const rows = await streamResourceCsv(resourceId, (row) => {
+    const rows = await streamResourceCsv(resource, (row) => {
       const normalized = normalizeProductionRecord(row, area.areaId, area.areaName);
       if (!normalized) return;
-      const key = `${normalized.wellName}|${normalized.wellId}|${normalized.year}|${normalized.month}|conv`;
+      const key = `${normalized.wellName}|${normalized.wellId}|${normalized.year}|${normalized.month}`;
       if (seen.has(key)) return;
       seen.add(key);
       records.push(normalized);
       matchedRows.push(normalized);
       matched++;
     });
-    onStep?.(`Descargado produccion convencional ${area.areaId} ${year}: ${matched} de ${rows} filas`);
+    onStep?.(`Descargado Capítulo IV ${area.areaId} ${year}: ${matched} de ${rows} filas`);
     await onEvent?.({
       type: 'resource_completed',
       areaId: area.areaId,
-      source: 'convencional',
+      source: 'capitulo-iv',
       year,
       scannedRows: rows,
       matchedRows: matched,
       records: matchedRows,
     });
   }
-
-  await delay(DOWNLOAD_PAUSE_MS);
-  onStep?.(`Descargando produccion no convencional ${area.areaId}`);
-  await onEvent?.({ type: 'resource_started', areaId: area.areaId, source: 'no convencional' });
-  let ncMatched = 0;
-  const ncMatchedRows: ProductionRecord[] = [];
-  const ncRows = await streamResourceCsv(NC_PRODUCTION_RESOURCE, (row) => {
-    const normalized = normalizeProductionRecord(row, area.areaId, area.areaName);
-    if (!normalized || normalized.year < startYear) return;
-    const key = `${normalized.wellName}|${normalized.wellId}|${normalized.year}|${normalized.month}|nc`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    records.push(normalized);
-    ncMatchedRows.push(normalized);
-    ncMatched++;
-  });
-  onStep?.(`Descargado produccion no convencional ${area.areaId}: ${ncMatched} de ${ncRows} filas`);
-  await onEvent?.({
-    type: 'resource_completed',
-    areaId: area.areaId,
-    source: 'no convencional',
-    scannedRows: ncRows,
-    matchedRows: ncMatched,
-    records: ncMatchedRows,
-  });
 
   const sorted = records.sort((a, b) => a.year - b.year || a.month - b.month || a.wellName.localeCompare(b.wellName));
   await onEvent?.({ type: 'completed', areaId: area.areaId, records: sorted });
@@ -261,11 +247,22 @@ function delay(ms: number): Promise<void> {
 
 export function countProductionResources(startYear: number): number {
   const currentYear = new Date().getFullYear();
-  let count = 1;
-  for (let year = startYear; year <= currentYear; year++) {
-    if (PROD_RESOURCE_BY_YEAR[year]) count++;
-  }
-  return count;
+  return Math.max(0, currentYear - Math.max(2006, startYear) + 1);
+}
+
+function newestResource(resources: CkanResource[]): CkanResource | undefined {
+  return [...resources].sort((a, b) => (b.last_modified ?? '').localeCompare(a.last_modified ?? ''))[0];
+}
+
+function normalize(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[–—]/g, '-')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export function aggregateMonthly(records: ProductionRecord[], startYear: number): MonthlyAggregate[] {

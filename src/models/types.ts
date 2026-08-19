@@ -50,7 +50,7 @@ export interface ProductionRecord {
   raw: Record<string, unknown>;
 }
 
-export type CapituloIvSource = 'convencional' | 'no convencional';
+export type CapituloIvSource = 'capitulo-iv';
 
 export type CapituloIvDownloadEvent =
   | {

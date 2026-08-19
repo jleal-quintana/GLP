@@ -1,6 +1,8 @@
 export const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
+declare const CAPIV_PROXY_BASE_URL: string;
+
 export async function fetchWithRetry(url: string, attempts = 4): Promise<Response> {
   const requestUrl = proxiedUrl(url);
   let lastError: unknown;
@@ -22,8 +24,19 @@ export async function fetchWithRetry(url: string, attempts = 4): Promise<Respons
 function proxiedUrl(url: string): string {
   if (typeof window === 'undefined') return url;
   const host = window.location.hostname;
-  if (host !== 'localhost' && host !== '127.0.0.1') return url;
   const target = new URL(url);
   if (target.hostname !== 'datos.gob.ar' && target.hostname !== 'datos.energia.gob.ar') return url;
-  return `/capiv-proxy?url=${encodeURIComponent(url)}`;
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return `/capiv-proxy?url=${encodeURIComponent(url)}`;
+  }
+  if (target.hostname === 'datos.gob.ar') return url;
+  const proxyBase = typeof CAPIV_PROXY_BASE_URL === 'string' ? CAPIV_PROXY_BASE_URL.trim() : '';
+  if (proxyBase) {
+    return proxyBase.includes('{url}')
+      ? proxyBase.replace('{url}', encodeURIComponent(url))
+      : `${proxyBase}${proxyBase.includes('?') ? '&' : '?'}url=${encodeURIComponent(url)}`;
+  }
+  throw new Error(
+    'La descarga de producción requiere un proxy HTTPS. Ejecutá GLP localmente o configurá CAPIV_PROXY_BASE_URL para la publicación.',
+  );
 }

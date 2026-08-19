@@ -3,26 +3,46 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Instalacion GLP</title>
+    <title>Instalación de GLP en Excel</title>
     <style>
       body { font-family: Arial, sans-serif; margin: 40px; max-width: 780px; color: #1a1a1a; }
       h1 { color: #33492d; }
-      a.download { display: inline-block; padding: 12px 16px; background: #33492d; color: white; text-decoration: none; border-radius: 4px; font-weight: 700; }
-      code { background: #f2f4ef; padding: 2px 4px; }
+      body { background: #f7f8f5; }
+      .card { background: white; border: 1px solid #dae0e5; border-radius: 14px; padding: 20px; margin: 20px 0; }
+      .note { background: #e2ff87; border-radius: 14px; padding: 20px; }
+      .downloads { display: flex; flex-wrap: wrap; gap: 10px; margin: 22px 0; }
+      .download { display: inline-block; padding: 11px 15px; border-radius: 8px; color: white; background: #33492d; font-weight: 700; text-decoration: none; }
+      .download.secondary { color: #33492d; background: #e2ff87; }
+      code, pre { background: #f2f4ef; padding: 2px 4px; }
+      pre { padding: 16px; border-radius: 8px; overflow-x: auto; }
       li { margin: 8px 0; }
     </style>
   </head>
   <body>
-    <h1>Instalacion de GLP</h1>
-    <p>Descarga el instalador, extraelo y ejecuta <code>instalar.bat</code>. Despues abri Excel y activa GLP desde Developer Add-ins.</p>
-    <p><a class="download" href="https://github.com/jleal-quintana/GLP/raw/main/tutorial/glp-installer.zip">Descargar glp-installer.zip</a></p>
-    <ol>
-      <li>Click derecho en el zip y elegir <strong>Extraer todo...</strong>.</li>
-      <li>Ejecutar <code>instalar.bat</code>.</li>
-      <li>Cerrar Excel completamente.</li>
-      <li>Abrir Excel con un libro nuevo.</li>
-      <li>Ir a <strong>Inicio &gt; Add-ins &gt; More Add-ins &gt; Developer Add-ins</strong>.</li>
-      <li>Elegir <strong>GLP</strong>.</li>
-    </ol>
+    <h1>Instalación de GLP en Excel</h1>
+    <p>Necesitás Excel de escritorio, conexión a internet y <code>glp-installer.zip</code>.</p>
+    <div class="downloads">
+      <a class="download" href="glp-installer.zip" download>Descargar instalador</a>
+      <a class="download secondary" href="GLP_Tutorial_Lanzamiento.pdf">Abrir guía PDF</a>
+    </div>
+    <div class="card">
+      <h2>Instalar</h2>
+      <ol>
+        <li>Descargar y extraer <code>glp-installer.zip</code>.</li>
+        <li>Cerrar Excel completamente.</li>
+        <li>Ejecutar <code>instalar.bat</code>.</li>
+        <li>Abrir Excel con un libro nuevo.</li>
+        <li>Ir a <strong>Inicio &gt; Complementos &gt; Más complementos &gt; Complementos de desarrollador</strong>.</li>
+        <li>Seleccionar <strong>GLP</strong>.</li>
+      </ol>
+    </div>
+    <div class="note">
+      <strong>Para desinstalar</strong>
+      <p>Cerrá Excel y ejecutá <code>desinstalar.bat</code> desde la misma carpeta extraída.</p>
+    </div>
+    <div class="card">
+      <h2>Actualizar un libro existente</h2>
+      <p>Abrí el mismo archivo de Excel y pulsá <strong>Actualizar libro</strong> al comienzo del panel. GLP detecta las áreas ya generadas, incorpora meses nuevos y conserva los supuestos editados.</p>
+    </div>
   </body>
 </html>

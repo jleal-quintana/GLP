@@ -1,0 +1,27 @@
+GLP - Instalación en Microsoft Excel
+====================================
+
+Requisitos
+----------
+- Windows 10 u 11.
+- Excel de escritorio de Microsoft 365.
+- Conexión a internet.
+
+Instalación
+-----------
+1. Cerrar Excel completamente.
+2. Ejecutar instalar.bat.
+3. Esperar el mensaje "LISTO - Instalación completada".
+4. Abrir Excel con un libro nuevo.
+5. Ir a Inicio > Complementos > Más complementos.
+6. Abrir Complementos de desarrollador y seleccionar GLP.
+
+Actualización mensual
+---------------------
+Abrir el libro generado anteriormente y pulsar "Actualizar libro" al comienzo del panel. GLP detectará las áreas existentes, incorporará meses nuevos y conservará los supuestos editados.
+
+Desinstalación
+--------------
+Cerrar Excel y ejecutar desinstalar.bat.
+
+La guía completa se encuentra en GLP_Tutorial_Lanzamiento.pdf.

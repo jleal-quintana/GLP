@@ -30,14 +30,14 @@ export function evaluateForecast(method: ForecastMethod, initial: number, di: nu
 
 export function forecastFormula(
   methodCell: string,
-  initialValue: number,
+  initialValue: number | string,
   diCell: string,
   bCell: string,
   tYears: number,
   rgpCell?: string,
   oilReference?: string | number,
 ): string {
-  const initial = Number.isFinite(initialValue) ? initialValue : 0;
+  const initial = typeof initialValue === 'string' ? initialValue : Number.isFinite(initialValue) ? initialValue : 0;
   const oil = oilReference ?? initial;
   const t = Number(tYears.toFixed(6));
   return `=IF(${methodCell}="Constante",${initial},IF(${methodCell}="Declinación Exp.",${initial}*EXP(-${diCell}*${t}),IF(${methodCell}="Declinación Hip.",${initial}/POWER(1+${bCell}*${diCell}*${t},1/${bCell}),IF(${methodCell}="HypMod",${initial}/POWER(1+${bCell}*${diCell}*${t},1/${bCell}),IF(${methodCell}="RGP",${rgpCell ?? 0}*${oil}/1000,IF(${methodCell}="Rap Np",${initial}/POWER(1+${bCell}*${diCell}*${t},1/${bCell}),${initial}))))))`;

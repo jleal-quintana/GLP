@@ -9,7 +9,7 @@ import { aggregateMonthly, countProductionResources, fetchAreaProduction } from 
 import { appendDebug, createDebugEntry } from './debugSheet';
 import { writeAreaSheets } from './areaSheets';
 import { appendDownloadLedgerEvent, ensureDownloadLedger } from './downloadLedger';
-import { SUMMARY_SHEET, STATE_SHEET } from './names';
+import { areaSheetNames, SUMMARY_SHEET, STATE_SHEET } from './names';
 import { addLineChart, getOrAddSheet, writeMatrix, writeTable, writeTitle } from './sheetLayout';
 
 interface BuildResult {
@@ -72,6 +72,9 @@ export async function buildWorkbook(
           await appendDownloadLedgerEvent(plan, event);
         },
       );
+      if (records.length === 0) {
+        throw new Error(`No se encontraron registros para ${plan.selection.areaId} desde ${startYear}.`);
+      }
       report(`Filtrando registros ${plan.selection.areaId}: ${records.length} pozo-mes`, plan, areaIndex, 1);
       await appendDebug(createDebugEntry(plan.selection.areaId, 'ok', `Registros pozo-mes descargados: ${records.length}`));
 
@@ -149,8 +152,8 @@ async function writeSummary(results: BuildResult[]): Promise<void> {
   await Excel.run(async (context) => {
     const sheet = await getOrAddSheet(context, SUMMARY_SHEET);
     sheet.getRange().clear();
-    writeTitle(sheet, 'Resumen consolidado de areas', 'Suma de historicos y proyecciones individuales');
-    const headers = ['Area', 'Nombre', 'Ultimo mes', 'Petroleo ultimo', 'Gas ultimo', 'Bruta ultimo', 'Warnings'];
+    writeTitle(sheet, 'Resumen consolidado de áreas', 'Suma de históricos y proyecciones individuales');
+    const headers = ['Área', 'Nombre', 'Último mes', 'Petróleo último', 'Gas último', 'Bruta última', 'Advertencias'];
     const rows = results.map((result) => {
       const last = result.monthly.at(-1);
       return [
@@ -165,6 +168,7 @@ async function writeSummary(results: BuildResult[]): Promise<void> {
     });
     writeTable(sheet, 'A4:G4', headers, rows, 'Resumen Areas');
     writeConsolidatedMonthly(sheet, results);
+    sheet.freezePanes.freezeRows(14);
     await context.sync();
   });
 }
@@ -204,10 +208,44 @@ function writeConsolidatedMonthly(sheet: Excel.Worksheet, results: BuildResult[]
   }
   const rows = [...byDate.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, values]) => [date, values.kind, values.oil, values.gas, values.water, values.gross]);
-  writeTable(sheet, 'A14:F14', ['Fecha', 'Tipo', 'Petroleo total', 'Gas total', 'Agua total', 'Bruta total'], rows, 'Resumen mensual');
+    .map(([date, values], index) => {
+      const summaryRow = 15 + index;
+      return [
+        date,
+        values.kind,
+        consolidatedFormula(results, summaryRow, [1, 2]),
+        consolidatedFormula(results, summaryRow, [3, 4]),
+        consolidatedFormula(results, summaryRow, [7, 8]),
+        consolidatedFormula(results, summaryRow, [5, 6]),
+      ];
+    });
+  writeTable(sheet, 'A14:F14', ['Fecha', 'Tipo', 'Petróleo total', 'Gas total', 'Agua total', 'Bruta total'], rows, 'Resumen mensual');
   const rowCount = Math.max(2, rows.length + 1);
   addLineChart(sheet, sheet.getRangeByIndexes(13, 0, rowCount, 6), 'Consolidado total', 'I4', 'P22');
+}
+
+function consolidatedFormula(results: BuildResult[], summaryRow: number, valueColumns: number[]): string {
+  const terms: string[] = [];
+  for (const result of results) {
+    const pronoName = areaSheetNames(result.areaId).prono.replace(/'/g, "''");
+    const lastRow = 12 + result.summary.length;
+    for (const columnIndex of valueColumns) {
+      const column = excelColumn(columnIndex);
+      terms.push(`SUMIF('${pronoName}'!$A$13:$A$${lastRow},$A${summaryRow},'${pronoName}'!$${column}$13:$${column}$${lastRow})`);
+    }
+  }
+  return terms.length ? `=${terms.join('+')}` : '=0';
+}
+
+function excelColumn(index: number): string {
+  let value = index + 1;
+  let output = '';
+  while (value > 0) {
+    value--;
+    output = String.fromCharCode(65 + (value % 26)) + output;
+    value = Math.floor(value / 26);
+  }
+  return output;
 }
 
 function buildAreaSummary(
