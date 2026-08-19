@@ -54,10 +54,40 @@ export function writeRangeValues(range: Excel.Range, values: (string | number)[]
   range.values = values;
 }
 
-export function addLineChart(sheet: Excel.Worksheet, source: Excel.Range, title: string, topLeft: string, bottomRight: string): void {
+export function addLineChart(
+  sheet: Excel.Worksheet,
+  source: Excel.Range,
+  title: string,
+  topLeft: string,
+  bottomRight: string,
+  yAxisTitle?: string,
+  color = brand.olive,
+): void {
   const chart = sheet.charts.add(Excel.ChartType.line, source, Excel.ChartSeriesBy.columns);
   chart.title.text = title;
+  chart.title.format.font.name = 'Montserrat';
+  chart.title.format.font.size = 12;
+  chart.title.format.font.bold = true;
+  chart.title.format.font.color = brand.forest;
   chart.legend.position = Excel.ChartLegendPosition.bottom;
+  chart.legend.visible = false;
+  chart.plotVisibleOnly = false;
+  chart.displayBlanksAs = Excel.ChartDisplayBlanksAs.notPlotted;
+  chart.format.fill.setSolidColor('#FFFFFF');
+  chart.plotArea.format.fill.setSolidColor('#FFFFFF');
+  chart.axes.categoryAxis.title.text = 'Mes';
+  chart.axes.categoryAxis.title.visible = true;
+  chart.axes.valueAxis.minimum = 0;
+  chart.axes.valueAxis.numberFormat = '#,##0';
+  chart.axes.valueAxis.majorGridlines.format.line.color = brand.slate;
+  if (yAxisTitle) {
+    chart.axes.valueAxis.title.text = yAxisTitle;
+    chart.axes.valueAxis.title.visible = true;
+  }
+  const series = chart.series.getItemAt(0);
+  series.markerStyle = Excel.ChartMarkerStyle.none;
+  series.format.line.color = color;
+  series.format.line.weight = 2;
   chart.setPosition(topLeft, bottomRight);
 }
 

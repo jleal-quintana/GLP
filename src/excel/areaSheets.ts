@@ -1,8 +1,9 @@
 import { forecastFormula, lastNonMissing, nextMonth } from '../domain/forecast';
 import type { AreaWorkbookPlan, MonthlyAggregate, ProductionRecord } from '../models/types';
 import { appendDebug, createDebugEntry, ensureDebugSheet } from './debugSheet';
+import { writeForecastCharts } from './forecastCharts';
 import { areaSheetNames } from './names';
-import { addLineChart, getOrAddSheet, writeMatrix, writeTable, writeTitle } from './sheetLayout';
+import { getOrAddSheet, writeMatrix, writeTable, writeTitle } from './sheetLayout';
 
 interface PreservedSettings {
   prono?: {
@@ -80,8 +81,8 @@ export async function writeAreaForecastSheets(
     writePozosSheet(pozos, plan, monthly, middleMissingPolicy);
     if (preserved?.pozos) restorePozosSettings(pozos, preserved.pozos);
   });
-  await writeAreaSheet(plan.selection.areaId, 'Graficos', names.graficos, async (graficos, context) => {
-    writeChartsSheet(context, graficos, plan, monthly.length);
+  await writeAreaSheet(plan.selection.areaId, 'Graficos', names.graficos, async (graficos) => {
+    writeChartsSheet(graficos, plan, monthly.length);
   });
 }
 
@@ -146,7 +147,11 @@ async function writeAreaSheet(
 }
 
 async function prepareAreaSheet(areaId: string, sheetStep: string, sheetName: string): Promise<void> {
-  await writeAreaSheetStep(areaId, `${sheetStep} preparar`, sheetName, (sheet) => {
+  await writeAreaSheetStep(areaId, `${sheetStep} preparar`, sheetName, async (sheet, context) => {
+    const charts = sheet.charts;
+    charts.load('items');
+    await context.sync();
+    for (const chart of charts.items) chart.delete();
     sheet.getRange().clear();
     sheet.getRange('A1:H2').unmerge();
   });
@@ -385,23 +390,15 @@ function writeDetailSheet(sheet: Excel.Worksheet, records: ProductionRecord[]): 
 }
 
 function writeChartsSheet(
-  context: Excel.RequestContext,
   sheet: Excel.Worksheet,
   plan: AreaWorkbookPlan,
   historyMonths: number,
 ): void {
-  writeTitle(sheet, `Gráficos - ${plan.selection.areaId}`, 'Gráficos nativos de Excel');
   const names = areaSheetNames(plan.selection.areaId);
-  const prono = context.workbook.worksheets.getItem(names.prono);
-  const pozos = context.workbook.worksheets.getItem(names.pozos);
   const forecastMonths = plan.defaults.horizonYears * 12;
-  const pronoRows = Math.max(2, historyMonths + forecastMonths + 1);
-  const pozosRows = Math.max(2, historyMonths + forecastMonths + 1);
-  addLineChart(sheet, prono.getRangeByIndexes(11, 0, pronoRows, 3), 'Petróleo', 'A4', 'H22');
-  addLineChart(sheet, prono.getRangeByIndexes(11, 0, pronoRows, 5), 'Gas', 'I4', 'P22');
-  addLineChart(sheet, prono.getRangeByIndexes(11, 0, pronoRows, 7), 'Bruta', 'A24', 'H42');
-  addLineChart(sheet, prono.getRangeByIndexes(11, 0, pronoRows, 12), 'Ratios', 'I24', 'P42');
-  addLineChart(sheet, pozos.getRangeByIndexes(8, 0, pozosRows, 4), 'Pozos', 'A44', 'H62');
+  const totalMonths = Math.max(1, historyMonths + forecastMonths);
+  writeTitle(sheet, `Gráficos técnicos - ${plan.selection.areaId}`, 'Histórico y pronóstico separados por variable');
+  writeForecastCharts(sheet, { prono: names.prono, pozos: names.pozos, hdp: names.hdp }, totalMonths, historyMonths);
 }
 
 function maybeBlank(month: MonthlyAggregate, value: number, middleMissingPolicy: 'blank' | 'zero'): string | number {

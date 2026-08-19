@@ -321,7 +321,7 @@ export function App() {
       <header className="topbar">
         <img src="assets/branding/logo_isotipo.png" alt="Quintana Energy" />
         <div className="brand-copy">
-          <div className="product-line"><h1>CapIV</h1><span>v0.3</span></div>
+          <div className="product-line"><h1>CapIV</h1><span>v0.4</span></div>
           <p>Capítulo IV · Datos y pronósticos</p>
         </div>
         <span className={catalog.length ? 'connection-dot online' : 'connection-dot'} title={catalog.length ? 'Catálogo conectado' : 'Conectando'} />
@@ -431,6 +431,10 @@ export function App() {
                 <MethodSelect label="Bruta" value={defaults.grossMethod} options={GROSS_METHODS} onChange={(value) => setDefaults({ ...defaults, grossMethod: value as ForecastDefaults['grossMethod'] })} />
                 <MethodSelect label="Petróleo" value={defaults.oilMethod} options={OIL_METHODS} onChange={(value) => setDefaults({ ...defaults, oilMethod: value as ForecastDefaults['oilMethod'] })} />
                 <MethodSelect label="Gas" value={defaults.gasMethod} options={GAS_METHODS} onChange={(value) => setDefaults({ ...defaults, gasMethod: value as ForecastDefaults['gasMethod'] })} />
+              </div>
+              <div className="forecast-output-note">
+                <strong>Gráficos técnicos separados</strong>
+                <span>Producción, relaciones, inyección, acumuladas, pozos y RAP vs. Np; cada visual conserva unidades compatibles.</span>
               </div>
               <label className="check-row">
                 <input type="checkbox" checked={defaults.takeInitialFromHistory} onChange={(event) => setDefaults({ ...defaults, takeInitialFromHistory: event.target.checked })} />

@@ -46,7 +46,7 @@ Al abrir un archivo generado anteriormente, usar **Actualizar datos**. CapIV rec
 - `{AREA}_HDP`: histórico mensual.
 - `{AREA}_Prono`: pronóstico de producción y supuestos editables.
 - `{AREA}_Pozos`: pronóstico de actividad.
-- `{AREA}_Graficos`: gráficos del área.
+- `{AREA}_Graficos`: 11 gráficos técnicos separados: petróleo, gas, bruta, agua, corte de agua, RGP, RAP/WOR, inyección, acumuladas líquidas, pozos y RAP vs. Np.
 - `{AREA}_Detalle`: detalle pozo-mes.
 - `Resumen_Areas`: consolidado que sigue los cambios hechos en cada pronóstico.
 - `CapIV_Descarga`: trazabilidad de recursos y filas descargadas.

@@ -224,6 +224,10 @@ function mergeData(existing: WorkbookAreaData[], replacements: WorkbookAreaData[
 async function writeSummary(results: BuildResult[]): Promise<void> {
   await Excel.run(async (context) => {
     const sheet = await getOrAddSheet(context, SUMMARY_SHEET);
+    const charts = sheet.charts;
+    charts.load('items');
+    await context.sync();
+    for (const chart of charts.items) chart.delete();
     sheet.getRange().clear();
     writeTitle(sheet, 'Resumen consolidado de áreas', 'Suma de históricos y proyecciones individuales');
     const headers = ['Área', 'Nombre', 'Último mes', 'Petróleo último', 'Gas último', 'Bruta última', 'Advertencias'];
@@ -298,8 +302,36 @@ function writeConsolidatedMonthly(sheet: Excel.Worksheet, results: BuildResult[]
       ];
     });
   writeTable(sheet, 'A14:F14', ['Fecha', 'Tipo', 'Petróleo total', 'Gas total', 'Agua total', 'Bruta total'], rows, 'Resumen mensual');
-  const rowCount = Math.max(2, rows.length + 1);
-  addLineChart(sheet, sheet.getRangeByIndexes(13, 0, rowCount, 6), 'Consolidado total', 'I4', 'P22');
+  const oilSource = writeSummaryChartSource(sheet, 25, rows.length, 'C', 'Petróleo total');
+  const gasSource = writeSummaryChartSource(sheet, 28, rows.length, 'D', 'Gas total');
+  const waterSource = writeSummaryChartSource(sheet, 31, rows.length, 'E', 'Agua total');
+  const grossSource = writeSummaryChartSource(sheet, 34, rows.length, 'F', 'Bruta total');
+  addLineChart(sheet, oilSource, 'Petróleo consolidado', 'I4', 'P22', 'm³/mes');
+  addLineChart(sheet, gasSource, 'Gas consolidado', 'Q4', 'X22', 'miles de m³/mes', '#1B4B6C');
+  addLineChart(sheet, waterSource, 'Agua consolidada', 'I24', 'P42', 'm³/mes', '#1B4B6C');
+  addLineChart(sheet, grossSource, 'Producción bruta consolidada', 'Q24', 'X42', 'm³/mes');
+  sheet.getRangeByIndexes(0, 25, Math.max(15 + rows.length, 16), 11).columnHidden = true;
+}
+
+function writeSummaryChartSource(
+  sheet: Excel.Worksheet,
+  startColumn: number,
+  rowCount: number,
+  valueColumn: string,
+  valueHeader: string,
+): Excel.Range {
+  const header = sheet.getRangeByIndexes(13, startColumn, 1, 2);
+  header.values = [['Fecha', valueHeader]];
+  header.format.fill.color = '#DAE0E5';
+  header.format.font.bold = true;
+  if (rowCount > 0) {
+    const formulas = Array.from({ length: rowCount }, (_, index) => {
+      const sourceRow = 15 + index;
+      return [`=$A$${sourceRow}`, `=$${valueColumn}$${sourceRow}`];
+    });
+    header.getOffsetRange(1, 0).getResizedRange(rowCount - 1, 1).formulas = formulas;
+  }
+  return header.getResizedRange(Math.max(rowCount, 1), 1);
 }
 
 function consolidatedFormula(results: BuildResult[], summaryRow: number, valueColumns: number[]): string {
