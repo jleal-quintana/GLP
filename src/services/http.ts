@@ -53,7 +53,6 @@ function proxiedUrl(url: string): string {
   if (host === 'localhost' || host === '127.0.0.1') {
     return `/capiv-proxy?url=${encodeURIComponent(url)}`;
   }
-  if (target.hostname === 'datos.gob.ar') return url;
   const proxyBase = typeof CAPIV_PROXY_BASE_URL === 'string' ? CAPIV_PROXY_BASE_URL.trim() : '';
   if (proxyBase) {
     return proxyBase.includes('{url}')
