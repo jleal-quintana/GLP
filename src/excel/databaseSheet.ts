@@ -13,6 +13,10 @@ export interface DownloadedArea {
   records: ProductionRecord[];
 }
 
+const EXCEL_MAX_ROWS = 1_048_576;
+const EXCEL_MAX_COLUMNS = 16_384;
+const WRITE_CHUNK_ROWS = 5_000;
+
 export async function captureSelectedCell(granularity: DataOutputTarget['granularity']): Promise<DataOutputTarget> {
   return Excel.run(async (context) => {
     const range = context.workbook.getSelectedRange();
@@ -36,6 +40,12 @@ export async function writeDatabaseTable(
   onOverwrite?: OverwriteDecisionHandler,
 ): Promise<{ rangeAddress: string; rowCount: number }> {
   const matrix = buildDatabaseMatrix(target.granularity, downloads);
+  if (matrix.length > EXCEL_MAX_ROWS || matrix[0].length > EXCEL_MAX_COLUMNS) {
+    throw new Error(
+      `La tabla requiere ${matrix.length.toLocaleString('es-AR')} filas y ${matrix[0].length} columnas, `
+      + 'y supera el límite de una hoja de Excel. Elegí menos áreas o un año de inicio más reciente.',
+    );
+  }
   const inspection = await inspectDestination(target, matrix.length, matrix[0].length);
   if (inspection.occupiedCells > 0 || inspection.overlappingTables.length > 0) {
     const accepted = onOverwrite ? await onOverwrite(inspection) : false;
@@ -67,7 +77,12 @@ export async function writeDatabaseTable(
     }
     const output = sheet.getRangeByIndexes(rowIndex, columnIndex, matrix.length, matrix[0].length);
     output.clear(Excel.ClearApplyTo.all);
-    output.values = matrix;
+    await context.sync();
+    for (let offset = 0; offset < matrix.length; offset += WRITE_CHUNK_ROWS) {
+      const values = matrix.slice(offset, offset + WRITE_CHUNK_ROWS);
+      sheet.getRangeByIndexes(rowIndex + offset, columnIndex, values.length, matrix[0].length).values = values;
+      await context.sync();
+    }
     const table = sheet.tables.add(output, true);
     table.name = target.tableName;
     table.showBandedRows = true;
@@ -95,15 +110,22 @@ async function inspectDestination(target: DataOutputTarget, rowCount: number, co
     const tables = sheet.tables;
     tables.load('items/name');
     await context.sync();
+    if (start.rowIndex + rowCount > EXCEL_MAX_ROWS || start.columnIndex + columnCount > EXCEL_MAX_COLUMNS) {
+      throw new Error(
+        `La tabla no entra desde ${target.startAddress}. Elegí una celda más arriba o reducí la cantidad de datos.`,
+      );
+    }
     const destination = sheet.getRangeByIndexes(start.rowIndex, start.columnIndex, rowCount, columnCount);
-    destination.load(['address', 'values']);
+    destination.load('address');
+    const occupiedRange = destination.getUsedRangeOrNullObject(true);
+    occupiedRange.load(['isNullObject', 'cellCount']);
     const tableRanges = tables.items.map((table) => {
       const range = table.getRange();
       range.load(['rowIndex', 'columnIndex', 'rowCount', 'columnCount']);
       return { name: table.name, range };
     });
     await context.sync();
-    const occupiedCells = destination.values.flat().filter((value) => value !== '' && value !== null).length;
+    const occupiedCells = occupiedRange.isNullObject ? 0 : occupiedRange.cellCount;
     return {
       sheetName: target.sheetName,
       rangeAddress: destination.address,
