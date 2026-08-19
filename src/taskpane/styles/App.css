@@ -86,6 +86,37 @@ button:disabled { cursor: default; opacity: 0.52; }
 .forecast-scope-note { display: grid; gap: 3px; margin-bottom: 10px; padding: 10px; border: 1px solid #c7d3bd; border-radius: 9px; background: #f4f8ed; }
 .forecast-scope-note strong { color: var(--forest); font-size: 9.8px; }
 .forecast-scope-note span { color: var(--muted); font-size: 8.7px; line-height: 1.4; }
+.asset-builder { margin: 0 0 11px; padding: 10px; border: 1px solid #c8d4bf; border-radius: 10px; background: #f5f8f1; }
+.asset-builder > summary { padding: 0; color: var(--forest); font-size: 10px; }
+.asset-editor { display: grid; gap: 9px; margin-top: 10px; }
+.asset-editor .helper-text { margin-top: 0; }
+.asset-groups { display: grid; gap: 7px; }
+.asset-card { display: grid; gap: 7px; padding: 8px; border: 1px solid #d8dfd4; border-radius: 8px; background: white; }
+.asset-card-title { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.asset-card-title strong { color: var(--forest); font-size: 10px; }
+.asset-card-title .text-button { min-height: 24px; padding: 2px 4px; color: #8d2e2e; }
+.asset-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.asset-chips button { display: flex; gap: 5px; align-items: center; min-height: 25px; max-width: 100%; padding: 4px 7px; overflow: hidden; border-color: #cbd5c5; color: var(--forest); background: #f5f8f1; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.asset-chips button span { color: #8d2e2e; font-size: 12px; }
+.province-shortcuts { display: flex; flex-wrap: wrap; gap: 5px; }
+.province-shortcuts button { min-height: 27px; padding: 4px 7px; border-color: #b8c9d5; color: var(--marine); font-size: 8.5px; }
+.asset-area-picker { display: grid; gap: 5px; max-height: 150px; overflow: auto; padding-right: 2px; }
+.asset-area-option { display: flex; gap: 7px; align-items: center; padding: 7px; border: 1px solid #d9dfda; border-radius: 8px; background: white; cursor: pointer; }
+.asset-area-option input { flex: 0 0 auto; width: 15px; min-height: 15px; margin: 0; accent-color: var(--olive); }
+.asset-area-option span { min-width: 0; }
+.asset-area-option strong, .asset-area-option small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-area-option strong { color: var(--forest); font-size: 9px; }
+.asset-area-option small { margin-top: 2px; color: var(--muted); font-size: 8px; font-weight: 500; }
+.asset-create { width: 100%; border-color: var(--olive); color: white; background: var(--olive); font-size: 9.5px; }
+.bulk-editor { display: grid; gap: 9px; padding: 10px; border: 1px solid #b8c9d5; border-radius: 10px; background: #f4f8fb; }
+.bulk-editor-heading strong, .bulk-editor-heading span { display: block; }
+.bulk-editor-heading strong { color: var(--marine); font-size: 10px; }
+.bulk-editor-heading span { margin-top: 3px; color: var(--muted); font-size: 8.5px; }
+.bulk-methods { display: grid; gap: 7px; }
+.decline-editor { margin: 0; border-top: 1px solid #d9e2e8; }
+.decline-editor summary { color: var(--marine); }
+.decline-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 9px; }
+.bulk-apply { width: 100%; border-color: var(--marine); color: white; background: var(--marine); font-size: 9.5px; }
 
 .area-list { display: grid; gap: 6px; max-height: 236px; overflow: auto; padding: 1px 2px 1px 0; scrollbar-width: thin; }
 .area-item { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: center; min-height: 48px; padding: 8px; border-color: var(--border); text-align: left; }
@@ -180,6 +211,7 @@ summary { padding-top: 9px; color: var(--marine); cursor: pointer; font-size: 9p
   .quick-update-card, .flow-source-card { grid-template-columns: 1fr 140px; align-items: center; }
   .field-grid:not(.two-columns) { grid-template-columns: 0.8fr 1.2fr; }
   .method-grid { grid-template-columns: repeat(3, 1fr); }
+  .bulk-methods { grid-template-columns: repeat(3, 1fr); }
   .override-methods { grid-template-columns: 1fr 1fr; }
   .destination-card { grid-template-columns: 1fr auto; align-items: center; }
 }

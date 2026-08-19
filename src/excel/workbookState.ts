@@ -1,4 +1,5 @@
-import type { AreaWorkbookPlan, DataOutputTarget, WorkbookAreaData } from '../models/types';
+import { normalizeAssetGroups } from '../domain/assets';
+import type { AreaWorkbookPlan, AssetGroup, DataOutputTarget, WorkbookAreaData } from '../models/types';
 import { STATE_SHEET } from './names';
 
 interface StoredWorkbookState {
@@ -9,6 +10,7 @@ interface StoredWorkbookState {
   dataSavedAt?: string;
   forecastSavedAt?: string;
   dataOutput?: DataOutputTarget;
+  assetGroups?: AssetGroup[];
 }
 
 export interface SavedWorkbookPlans {
@@ -18,6 +20,7 @@ export interface SavedWorkbookPlans {
   dataSavedAt?: string;
   forecastSavedAt?: string;
   dataOutput?: DataOutputTarget;
+  assetGroups: AssetGroup[];
 }
 
 export function parseWorkbookState(serialized: string): SavedWorkbookPlans {
@@ -37,6 +40,7 @@ export function parseWorkbookState(serialized: string): SavedWorkbookPlans {
     dataSavedAt: parsed.dataSavedAt ?? parsed.savedAt,
     forecastSavedAt: parsed.forecastSavedAt,
     dataOutput: isDataOutputTarget(parsed.dataOutput) ? parsed.dataOutput : undefined,
+    assetGroups: normalizeAssetGroups(Array.isArray(parsed.assetGroups) ? parsed.assetGroups.filter(isAssetGroup) : []),
     plans: parsed.plans.map((plan) => ({ ...plan, mode: 'update' })),
     data: (parsed.results ?? []).filter(isWorkbookAreaData),
   };
@@ -69,8 +73,14 @@ export async function readSavedWorkbookPlans(): Promise<SavedWorkbookPlans | nul
 function isStoredWorkbookState(value: unknown): value is StoredWorkbookState {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<StoredWorkbookState>;
-  if (![1, 2, 3].includes(candidate.schema ?? 0) || !Array.isArray(candidate.plans) || candidate.plans.length === 0) return false;
+  if (![1, 2, 3, 4].includes(candidate.schema ?? 0) || !Array.isArray(candidate.plans) || candidate.plans.length === 0) return false;
   return candidate.plans.every(isAreaWorkbookPlan);
+}
+
+function isAssetGroup(value: unknown): value is AssetGroup {
+  if (!value || typeof value !== 'object') return false;
+  const group = value as Partial<AssetGroup>;
+  return Boolean(group.id && group.name && Array.isArray(group.areaIds) && group.areaIds.every((areaId) => typeof areaId === 'string'));
 }
 
 function isDataOutputTarget(value: unknown): value is DataOutputTarget {

@@ -1,5 +1,7 @@
 import type {
+  AreaForecastOverrideField,
   AreaWorkbookPlan,
+  AssetGroup,
   BuildProgressHandler,
   DataOutputTarget,
   MissingMonthsDecisionHandler,
@@ -7,13 +9,14 @@ import type {
   WorkbookAreaData,
   OverwriteDecisionHandler,
 } from '../models/types';
+import { normalizeAssetGroups } from '../domain/assets';
 import { evaluateForecast, lastNonMissing, resolveForecastMethods } from '../domain/forecast';
 import { aggregateMonthly, countProductionResources, fetchAreaProduction } from '../services/capiv';
 import { appendDebug, createDebugEntry } from './debugSheet';
 import { writeAreaForecastSheets } from './areaSheets';
 import { writeDatabaseTable } from './databaseSheet';
 import { appendDownloadLedgerEvent, ensureDownloadLedger } from './downloadLedger';
-import { areaSheetNames, SUMMARY_SHEET, STATE_SHEET } from './names';
+import { areaSheetNames, assetSheetName, SUMMARY_SHEET, STATE_SHEET } from './names';
 import { addLineChart, getOrAddSheet, writeMatrix, writeTable, writeTitle } from './sheetLayout';
 import { readSavedWorkbookPlans } from './workbookState';
 
@@ -28,6 +31,11 @@ interface SummaryMonthly {
   water: number;
   gross: number;
   kind: 'hist' | 'prono';
+}
+
+export interface BuildForecastOptions {
+  assetGroups?: AssetGroup[];
+  applyOverrideFields?: Record<string, AreaForecastOverrideField[]>;
 }
 
 export async function downloadWorkbookData(
@@ -135,7 +143,7 @@ export async function downloadWorkbookData(
   await writeState(mergedPlans, mergedData, {
     dataSavedAt: new Date().toISOString(),
     forecastSavedAt: saved?.forecastSavedAt,
-  }, output);
+  }, output, saved?.assetGroups);
   await appendDebug(createDebugEntry(STATE_SHEET, 'ok', 'Estado guardado'));
   report('Datos actualizados', undefined, undefined, total - completed);
   await appendDebug(createDebugEntry('Fin datos', 'ok', 'Descarga de datos completada'));
@@ -144,6 +152,7 @@ export async function downloadWorkbookData(
 export async function buildForecastWorkbook(
   plans: AreaWorkbookPlan[],
   onProgress?: BuildProgressHandler,
+  options: BuildForecastOptions = {},
 ): Promise<void> {
   const saved = await readSavedWorkbookPlans();
   if (!saved || saved.data.length === 0) {
@@ -175,7 +184,7 @@ export async function buildForecastWorkbook(
 
     report(`Preparando pronóstico ${plan.selection.areaId}`, plan, areaIndex, 1);
     const summary = buildAreaSummary(plan, data.monthly, data.middleMissingPolicy);
-    await writeAreaForecastSheets(plan, data.monthly, data.middleMissingPolicy);
+    await writeAreaForecastSheets(plan, data.monthly, data.middleMissingPolicy, options.applyOverrideFields?.[plan.selection.areaId]);
     report(`Pronóstico escrito ${plan.selection.areaId}`, plan, areaIndex, 1);
     results.push({ ...data, summary });
     await appendDebug(createDebugEntry(plan.selection.areaId, 'ok', `Pronóstico generado: ${summary.length} meses`));
@@ -184,8 +193,10 @@ export async function buildForecastWorkbook(
 
   report('Escribiendo resumen consolidado', undefined, undefined, 1);
   await writeSummary(results);
+  const assetGroups = normalizeAssetGroups(options.assetGroups ?? saved.assetGroups, results.map((result) => result.areaId));
+  await writeAssetSummaries(results, saved.assetGroups, assetGroups);
   const forecastSavedAt = new Date().toISOString();
-  await writeState(mergePlans(saved.plans, plans), saved.data, { dataSavedAt: saved.dataSavedAt, forecastSavedAt }, saved.dataOutput);
+  await writeState(mergePlans(saved.plans, plans), saved.data, { dataSavedAt: saved.dataSavedAt, forecastSavedAt }, saved.dataOutput, assetGroups);
   report('Pronósticos actualizados', undefined, undefined, total - completed);
   await appendDebug(createDebugEntry('Fin pronósticos', 'ok', 'Pronósticos y resumen actualizados'));
 }
@@ -222,14 +233,62 @@ function mergeData(existing: WorkbookAreaData[], replacements: WorkbookAreaData[
 }
 
 async function writeSummary(results: BuildResult[]): Promise<void> {
+  await writeSummarySheet(
+    SUMMARY_SHEET,
+    'Resumen consolidado de áreas',
+    'Suma de históricos y proyecciones individuales',
+    results,
+    'Resumen Areas',
+  );
+}
+
+async function writeAssetSummaries(
+  results: BuildResult[],
+  previousGroups: AssetGroup[],
+  groups: AssetGroup[],
+): Promise<void> {
+  const activeNames = new Set(groups.map((group) => assetSheetName(group.name)));
   await Excel.run(async (context) => {
-    const sheet = await getOrAddSheet(context, SUMMARY_SHEET);
+    for (const group of previousGroups) {
+      const name = assetSheetName(group.name);
+      if (activeNames.has(name)) continue;
+      const sheet = context.workbook.worksheets.getItemOrNullObject(name);
+      sheet.load('isNullObject');
+      await context.sync();
+      if (!sheet.isNullObject) sheet.delete();
+    }
+    await context.sync();
+  });
+  for (const group of groups) {
+    const included = results.filter((result) => group.areaIds.includes(result.areaId));
+    if (included.length === 0) continue;
+    await writeSummarySheet(
+      assetSheetName(group.name),
+      `Resumen de activo - ${group.name}`,
+      `Suma de ${included.length} ${included.length === 1 ? 'concesión' : 'concesiones'} pronosticadas por separado`,
+      included,
+      `Activo ${group.name}`,
+      group.name,
+    );
+  }
+}
+
+async function writeSummarySheet(
+  sheetName: string,
+  title: string,
+  subtitle: string,
+  results: BuildResult[],
+  tableLabel: string,
+  chartPrefix?: string,
+): Promise<void> {
+  await Excel.run(async (context) => {
+    const sheet = await getOrAddSheet(context, sheetName);
     const charts = sheet.charts;
     charts.load('items');
     await context.sync();
     for (const chart of charts.items) chart.delete();
     sheet.getRange().clear();
-    writeTitle(sheet, 'Resumen consolidado de áreas', 'Suma de históricos y proyecciones individuales');
+    writeTitle(sheet, title, subtitle);
     const headers = ['Área', 'Nombre', 'Último mes', 'Petróleo último', 'Gas último', 'Bruta última', 'Advertencias'];
     const rows = results.map((result) => {
       const last = result.monthly.at(-1);
@@ -243,8 +302,8 @@ async function writeSummary(results: BuildResult[]): Promise<void> {
         result.warnings.join(', '),
       ];
     });
-    writeTable(sheet, 'A4:G4', headers, rows, 'Resumen Areas');
-    writeConsolidatedMonthly(sheet, results);
+    writeTable(sheet, 'A4:G4', headers, rows, tableLabel);
+    writeConsolidatedMonthly(sheet, results, chartPrefix);
     sheet.freezePanes.freezeRows(14);
     await context.sync();
   });
@@ -255,12 +314,13 @@ async function writeState(
   results: WorkbookAreaData[],
   timestamps: { dataSavedAt?: string; forecastSavedAt?: string },
   dataOutput?: DataOutputTarget,
+  assetGroups: AssetGroup[] = [],
 ): Promise<void> {
   await Excel.run(async (context) => {
     const sheet = await getOrAddSheet(context, STATE_SHEET);
     sheet.visibility = Excel.SheetVisibility.veryHidden;
     sheet.getRange().clear();
-    writeWorkbookState(sheet, { schema: 3, plans, results, savedAt: new Date().toISOString(), ...timestamps, dataOutput });
+    writeWorkbookState(sheet, { schema: 4, plans, results, savedAt: new Date().toISOString(), ...timestamps, dataOutput, assetGroups });
     await context.sync();
   });
 }
@@ -275,7 +335,7 @@ function writeWorkbookState(sheet: Excel.Worksheet, state: unknown): void {
   writeMatrix(sheet, 'A1', rows.length ? rows : [['']], 'Estado workbook');
 }
 
-function writeConsolidatedMonthly(sheet: Excel.Worksheet, results: BuildResult[]): void {
+function writeConsolidatedMonthly(sheet: Excel.Worksheet, results: BuildResult[], chartPrefix?: string): void {
   const byDate = new Map<string, { oil: number; gas: number; water: number; gross: number; kind: 'hist' | 'prono' }>();
   for (const result of results) {
     for (const month of result.summary) {
@@ -306,10 +366,11 @@ function writeConsolidatedMonthly(sheet: Excel.Worksheet, results: BuildResult[]
   const gasSource = writeSummaryChartSource(sheet, 28, rows.length, 'D', 'Gas total');
   const waterSource = writeSummaryChartSource(sheet, 31, rows.length, 'E', 'Agua total');
   const grossSource = writeSummaryChartSource(sheet, 34, rows.length, 'F', 'Bruta total');
-  addLineChart(sheet, oilSource, 'Petróleo consolidado', 'I4', 'P22', 'm³/mes');
-  addLineChart(sheet, gasSource, 'Gas consolidado', 'Q4', 'X22', 'miles de m³/mes', '#1B4B6C');
-  addLineChart(sheet, waterSource, 'Agua consolidada', 'I24', 'P42', 'm³/mes', '#1B4B6C');
-  addLineChart(sheet, grossSource, 'Producción bruta consolidada', 'Q24', 'X42', 'm³/mes');
+  const prefix = chartPrefix ? `${chartPrefix} - ` : '';
+  addLineChart(sheet, oilSource, `${prefix}Petróleo`, 'I4', 'P22', 'm³/mes');
+  addLineChart(sheet, gasSource, `${prefix}Gas`, 'Q4', 'X22', 'miles de m³/mes', '#1B4B6C');
+  addLineChart(sheet, waterSource, `${prefix}Agua`, 'I24', 'P42', 'm³/mes', '#1B4B6C');
+  addLineChart(sheet, grossSource, `${prefix}Producción bruta`, 'Q24', 'X42', 'm³/mes');
   sheet.getRangeByIndexes(0, 25, Math.max(15 + rows.length, 16), 11).columnHidden = true;
 }
 
@@ -329,9 +390,9 @@ function writeSummaryChartSource(
       const sourceRow = 15 + index;
       return [`=$A$${sourceRow}`, `=$${valueColumn}$${sourceRow}`];
     });
-    header.getOffsetRange(1, 0).getResizedRange(rowCount - 1, 1).formulas = formulas;
+    sheet.getRangeByIndexes(14, startColumn, rowCount, 2).formulas = formulas;
   }
-  return header.getResizedRange(Math.max(rowCount, 1), 1);
+  return sheet.getRangeByIndexes(13, startColumn, rowCount + 1, 2);
 }
 
 function consolidatedFormula(results: BuildResult[], summaryRow: number, valueColumns: number[]): string {

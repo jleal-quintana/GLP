@@ -13,5 +13,15 @@ export function areaSheetNames(areaId: string) {
   };
 }
 
+export function assetSheetName(name: string): string {
+  const prefix = name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 23) || 'Activo';
+  return `Activo_${prefix}`.slice(0, 31);
+}
+
 export const SUMMARY_SHEET = 'Resumen_Areas';
 export const STATE_SHEET = '_CapIV_State';

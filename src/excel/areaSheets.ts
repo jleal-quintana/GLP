@@ -1,5 +1,5 @@
 import { forecastFormula, lastNonMissing, nextMonth } from '../domain/forecast';
-import type { AreaWorkbookPlan, MonthlyAggregate, ProductionRecord } from '../models/types';
+import type { AreaForecastOverrideField, AreaWorkbookPlan, MonthlyAggregate, ProductionRecord } from '../models/types';
 import { appendDebug, createDebugEntry, ensureDebugSheet } from './debugSheet';
 import { writeForecastCharts } from './forecastCharts';
 import { areaSheetNames } from './names';
@@ -16,6 +16,15 @@ interface PreservedSettings {
     decline: (string | number)[][];
   };
 }
+
+const DEFAULT_DECLINE = {
+  grossDi: 0.12,
+  grossB: 0.7,
+  oilDi: 0.12,
+  oilB: 0.7,
+  gasDi: 0.12,
+  gasB: 0.7,
+} as const;
 
 export async function writeAreaSheets(
   plan: AreaWorkbookPlan,
@@ -63,6 +72,7 @@ export async function writeAreaForecastSheets(
   plan: AreaWorkbookPlan,
   monthly: MonthlyAggregate[],
   middleMissingPolicy: 'blank' | 'zero',
+  applyOverrideFields: AreaForecastOverrideField[] = [],
 ): Promise<void> {
   const names = areaSheetNames(plan.selection.areaId);
   const preserved = plan.mode === 'update' ? await readExistingSettings(names.prono, names.pozos) : undefined;
@@ -76,6 +86,7 @@ export async function writeAreaForecastSheets(
   await writeAreaSheet(plan.selection.areaId, 'Prono', names.prono, async (prono) => {
     writePronoSheet(prono, plan, monthly, middleMissingPolicy);
     if (preserved?.prono) restorePronoSettings(prono, preserved.prono);
+    if (applyOverrideFields.length > 0) applyPlanSettings(prono, plan, applyOverrideFields);
   });
   await writeAreaSheet(plan.selection.areaId, 'Pozos', names.pozos, async (pozos) => {
     writePozosSheet(pozos, plan, monthly, middleMissingPolicy);
@@ -126,6 +137,39 @@ function restorePronoSettings(sheet: Excel.Worksheet, settings: NonNullable<Pres
 function restorePozosSettings(sheet: Excel.Worksheet, settings: NonNullable<PreservedSettings['pozos']>): void {
   sheet.getRange('B4:B6').values = settings.switches;
   sheet.getRange('E4:E6').values = settings.decline;
+}
+
+function applyPlanSettings(sheet: Excel.Worksheet, plan: AreaWorkbookPlan, fields: AreaForecastOverrideField[]): void {
+  const override = plan.override;
+  const values: Partial<Record<AreaForecastOverrideField, string | number>> = {
+    grossMethod: override?.grossMethod ?? plan.defaults.grossMethod,
+    oilMethod: override?.oilMethod ?? plan.defaults.oilMethod,
+    gasMethod: override?.gasMethod ?? plan.defaults.gasMethod,
+    takeInitialFromHistory: (override?.takeInitialFromHistory ?? plan.defaults.takeInitialFromHistory) ? 'Sí' : 'No',
+    grossDi: override?.grossDi ?? DEFAULT_DECLINE.grossDi,
+    grossB: override?.grossB ?? DEFAULT_DECLINE.grossB,
+    oilDi: override?.oilDi ?? DEFAULT_DECLINE.oilDi,
+    oilB: override?.oilB ?? DEFAULT_DECLINE.oilB,
+    gasDi: override?.gasDi ?? DEFAULT_DECLINE.gasDi,
+    gasB: override?.gasB ?? DEFAULT_DECLINE.gasB,
+  };
+  const cells: Partial<Record<AreaForecastOverrideField, string>> = {
+    grossMethod: 'B4',
+    oilMethod: 'B5',
+    gasMethod: 'B6',
+    takeInitialFromHistory: 'B7',
+    grossDi: 'E4',
+    grossB: 'E5',
+    oilDi: 'E6',
+    oilB: 'E7',
+    gasDi: 'E8',
+    gasB: 'E9',
+  };
+  for (const field of fields) {
+    const cell = cells[field];
+    const value = values[field];
+    if (cell && value !== undefined) sheet.getRange(cell).values = [[value]];
+  }
 }
 
 async function writeAreaSheet(
@@ -266,12 +310,12 @@ function writePronoSheet(
   sheet.getRange('B7').dataValidation.rule = { list: { inCellDropDown: true, source: 'Sí,No' } };
 
   writeMatrix(sheet, 'D4', [
-    ['Di bruta anual', 0.12],
-    ['b bruta', 0.7],
-    ['Di petróleo anual', 0.12],
-    ['b petróleo', 0.7],
-    ['Di gas anual', 0.12],
-    ['b gas', 0.7],
+    ['Di bruta anual', override?.grossDi ?? DEFAULT_DECLINE.grossDi],
+    ['b bruta', override?.grossB ?? DEFAULT_DECLINE.grossB],
+    ['Di petróleo anual', override?.oilDi ?? DEFAULT_DECLINE.oilDi],
+    ['b petróleo', override?.oilB ?? DEFAULT_DECLINE.oilB],
+    ['Di gas anual', override?.gasDi ?? DEFAULT_DECLINE.gasDi],
+    ['b gas', override?.gasB ?? DEFAULT_DECLINE.gasB],
     ['RGP constante', (lastNonMissing(monthly, 'gas') / Math.max(lastNonMissing(monthly, 'oil'), 1)) * 1000],
   ], `Supuestos Prono ${plan.selection.areaId}`);
 

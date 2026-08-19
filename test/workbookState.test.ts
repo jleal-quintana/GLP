@@ -58,7 +58,13 @@ describe('parseWorkbookState', () => {
     expect(state.dataOutput).toEqual(dataOutput);
   });
 
+  it('recupera los activos del esquema 4', () => {
+    const assetGroups = [{ id: 'mendoza', name: 'Mendoza', areaIds: ['CMOE'] }];
+    const state = parseWorkbookState(JSON.stringify({ schema: 4, plans: [plan], results: [result], assetGroups }));
+    expect(state.assetGroups).toEqual(assetGroups);
+  });
+
   it('rechaza un estado incompatible', () => {
-    expect(() => parseWorkbookState(JSON.stringify({ schema: 4, plans: [plan] }))).toThrow('formato compatible');
+    expect(() => parseWorkbookState(JSON.stringify({ schema: 5, plans: [plan] }))).toThrow('formato compatible');
   });
 });

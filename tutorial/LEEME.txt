@@ -28,6 +28,8 @@ Pronósticos
 -----------
 Es un flujo opcional e independiente. No hace falta usarlo para descargar una base.
 CapIV genera un pronóstico separado por cada área o concesión seleccionada. Resumen_Areas las reúne sin mezclar sus cálculos.
+En Cambio masivo podés aplicar métodos y parámetros Di/b a todas las concesiones, a un activo o a una sola concesión.
+Los activos son opcionales: agrupan concesiones sólo para crear un resumen y gráficos sumados. Si no creás activos, todo queda separado.
 
 Desinstalación
 --------------

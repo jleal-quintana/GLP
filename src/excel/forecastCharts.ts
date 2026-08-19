@@ -276,9 +276,9 @@ function writeHelperTable(sheet: Excel.Worksheet, startColumn: number, table: Ch
   header.format.fill.color = brand.slate;
   header.format.font.bold = true;
   if (table.formulas.length > 0) {
-    header.getOffsetRange(1, 0).getResizedRange(table.formulas.length - 1, table.headers.length - 1).formulas = table.formulas;
+    sheet.getRangeByIndexes(1, startColumn, table.formulas.length, table.headers.length).formulas = table.formulas;
   }
-  return header.getResizedRange(table.formulas.length, table.headers.length - 1);
+  return sheet.getRangeByIndexes(0, startColumn, table.formulas.length + 1, table.headers.length);
 }
 
 function addBrandedChart(sheet: Excel.Worksheet, source: Excel.Range, definition: ForecastChartDefinition): void {

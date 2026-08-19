@@ -83,7 +83,7 @@ def page_header(c, section, page):
     c.drawRightString(PAGE_W - MARGIN, PAGE_H - 48, section.upper())
     c.setStrokeColor(PALE_BLUE)
     c.line(MARGIN, PAGE_H - 68, PAGE_W - MARGIN, PAGE_H - 68)
-    text(c, f"Guía para usuarios de Excel  |  v0.4  |  {page}/6", MARGIN, 25, 8, MUTED)
+    text(c, f"Guía para usuarios de Excel  |  v0.5  |  {page}/6", MARGIN, 25, 8, MUTED)
 
 
 def title(c, eyebrow, heading, description=None):
@@ -130,7 +130,7 @@ def cover(c):
     c.setFillColor(BLUE)
     c.circle(-40, 60, 155, fill=1, stroke=0)
     rounded(c, MARGIN, PAGE_H - 118, 132, 25, LIME, radius=12)
-    text(c, "GUÍA OPERATIVA  |  v0.4", MARGIN + 13, PAGE_H - 109, 8.5, DARK_GREEN, "Inter-Bold")
+    text(c, "GUÍA OPERATIVA  |  v0.5", MARGIN + 13, PAGE_H - 109, 8.5, DARK_GREEN, "Inter-Bold")
     text(c, "CapIV", MARGIN, PAGE_H - 235, 47, WHITE, "Montserrat")
     text(c, "Capítulo IV", MARGIN, PAGE_H - 278, 28, LIME, "Montserrat")
     text(c, "Instalación en Excel, configuración y uso", MARGIN, PAGE_H - 316, 15, WHITE, "Inter-Bold")
@@ -187,8 +187,8 @@ def configure_page(c):
     text(c, "PRONÓSTICOS · OPCIONAL", MARGIN + 51, 367, 9, BLUE, "Inter-Bold")
     text(c, "Modelar con los datos guardados", MARGIN + 18, 327, 14, DARK_GREEN, "Inter-Bold")
     bullet(c, "Cada área o concesión genera un pronóstico independiente.", MARGIN + 18, 293, 455, dot=BLUE)
-    bullet(c, "Definí horizonte y métodos para las áreas deseadas.", MARGIN + 18, 265, 455, dot=BLUE)
-    bullet(c, "Generá Prono, Pozos, gráficos técnicos separados y Resumen sin volver a descargar.", MARGIN + 18, 233, 455, dot=BLUE)
+    bullet(c, "Usá Cambio masivo para aplicar métodos y Di/b a todas, a un activo o a una concesión.", MARGIN + 18, 265, 455, dot=BLUE)
+    bullet(c, "Los activos opcionales suman concesiones en una hoja propia; sin activos, todo queda separado.", MARGIN + 18, 233, 455, dot=BLUE)
     rounded(c, MARGIN, 105, PAGE_W - 2 * MARGIN, 72, LIME, radius=12)
     text(c, "Protección de datos", MARGIN + 16, 151, 9, DARK_GREEN, "Inter-Bold")
     text(c, "Para una ubicación personalizada, elegí Celda actual. Si hay contenido, CapIV muestra el rango y exige confirmar.", MARGIN + 16, 128, 9.4, DARK_GREEN, max_width=460, leading=13)
@@ -229,6 +229,7 @@ def outputs_page(c):
         ("{AREA}_Pozos", "Actividad y proyección de pozos."),
         ("{AREA}_Graficos", "Producción, ratios, inyección, acumuladas y pozos en gráficos separados."),
         ("Resumen_Areas", "Consolidado dinámico de las áreas seleccionadas."),
+        ("Activo_<nombre>", "Suma y cuatro gráficos del activo opcional; no mezcla los pronósticos."),
         ("CapIV_Descarga", "Recursos, fechas, estado y cantidad de filas."),
         ("CapIV_Debug", "Log de diagnóstico visible."),
         ("_CapIV_State", "Configuración interna; permanece oculta."),

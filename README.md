@@ -31,9 +31,10 @@ npx office-addin-dev-certs install
 1. Esperar a que cargue el catálogo oficial.
 2. Filtrar y seleccionar una o más áreas.
 3. Definir año inicial, horizonte y métodos de proyección.
-4. Opcionalmente, abrir **Ajustes por área** para sobrescribir parámetros concretos.
-5. Elegir **Actualizar datos** para conservar supuestos editados en Excel o **Regenerar áreas** para reconstruir las hojas.
-6. Revisar el resumen, los gráficos y `CapIV_Debug`.
+4. En **Cambio masivo**, aplicar métodos y parámetros Di/b a todas las concesiones, a un activo o a una sola concesión.
+5. Opcionalmente, agrupar concesiones en activos. Cada concesión conserva su pronóstico individual y el activo agrega una hoja de resumen con gráficos propios.
+6. Elegir **Actualizar** para conservar supuestos editados en Excel o **Regenerar** para reconstruir las hojas.
+7. Revisar los resúmenes, los gráficos y `CapIV_Debug`.
 
 ### Actualizar un libro existente
 
@@ -43,6 +44,8 @@ Al abrir un archivo generado anteriormente, usar **Actualizar datos**. CapIV rec
 
 Los pronósticos se calculan **por área/concesión**: si se seleccionan varias, CapIV genera un juego independiente de hojas para cada `cod_area`. `Resumen_Areas` las consolida visualmente, pero los cálculos no mezclan concesiones. La hoja de pozos proyecta actividad/cantidad de pozos del área; no genera una curva de producción individual por pozo.
 
+Los **activos** son opcionales. Se pueden crear, por ejemplo, activos individuales para CLME y EFO, y un activo Mendoza con sus seis concesiones. Las curvas siguen calculándose por concesión; CapIV suma las fórmulas de sus hojas `_Prono` en una hoja `Activo_<nombre>` con gráficos de petróleo, gas, agua y producción bruta. Si no se crea ningún activo, no cambia el comportamiento anterior y todo queda separado.
+
 ## Salida en el libro
 
 - `{AREA}_HDP`: histórico mensual.
@@ -51,6 +54,7 @@ Los pronósticos se calculan **por área/concesión**: si se seleccionan varias,
 - `{AREA}_Graficos`: 11 gráficos técnicos separados: petróleo, gas, bruta, agua, corte de agua, RGP, RAP/WOR, inyección, acumuladas líquidas, pozos y RAP vs. Np.
 - `{AREA}_Detalle`: detalle pozo-mes.
 - `Resumen_Areas`: consolidado que sigue los cambios hechos en cada pronóstico.
+- `Activo_<nombre>`: resumen y cuatro gráficos propios de las concesiones agrupadas; sólo se crea si el usuario define el activo.
 - `CapIV_Descarga`: trazabilidad de recursos y filas descargadas.
 - `CapIV_Debug`: log visible de ejecución.
 - `_CapIV_State`: estado interno oculto.

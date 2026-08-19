@@ -16,6 +16,8 @@ Para quitarlo, cerrar Excel y ejecutar `desinstalar.bat` desde la misma carpeta 
 
 En **Datos**, elegir áreas, año inicial y nivel Área o Pozo. La opción predeterminada **Nueva hoja** crea `CapIV_Datos` desde A1 sin seleccionar ninguna celda. **Celda actual** queda como alternativa para una ubicación personalizada. Para incorporar el último mes disponible, abrir el mismo Excel y pulsar **Actualizar datos**.
 
-El flujo **Pronósticos** es opcional e independiente. Genera un pronóstico separado por cada área o concesión seleccionada; `Resumen_Areas` sólo las reúne para comparar.
+El flujo **Pronósticos** es opcional e independiente. Genera un pronóstico separado por cada área o concesión seleccionada; `Resumen_Areas` las reúne para comparar.
+
+Para configurar varias concesiones rápido, usar **Cambio masivo** y elegir el alcance: todas, un activo o una concesión. Los campos vacíos no se modifican. También se pueden crear activos opcionales —por ejemplo Mendoza—: cada concesión sigue pronosticándose por separado y se agrega una hoja `Activo_<nombre>` con la suma y gráficos propios. Sin activos creados, todo queda separado.
 
 La guía completa está en `output/pdf/CapIV_Tutorial_Lanzamiento.pdf`.

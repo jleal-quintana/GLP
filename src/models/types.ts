@@ -34,6 +34,20 @@ export interface AreaForecastOverride {
   oilMethod?: ForecastDefaults['oilMethod'];
   gasMethod?: ForecastDefaults['gasMethod'];
   takeInitialFromHistory?: boolean;
+  grossDi?: number;
+  grossB?: number;
+  oilDi?: number;
+  oilB?: number;
+  gasDi?: number;
+  gasB?: number;
+}
+
+export type AreaForecastOverrideField = keyof Omit<AreaForecastOverride, 'areaId' | 'startYear'>;
+
+export interface AssetGroup {
+  id: string;
+  name: string;
+  areaIds: string[];
 }
 
 export interface ProductionRecord {
