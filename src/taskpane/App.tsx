@@ -53,6 +53,7 @@ export function App() {
   const [forecastSelected, setForecastSelected] = useState<AreaSelection[]>([]);
   const [overrides, setOverrides] = useState<Record<string, AreaForecastOverride>>({});
   const [defaults, setDefaults] = useState<ForecastDefaults>(DEFAULTS);
+  const [startYearDraft, setStartYearDraft] = useState(String(DEFAULTS.startYear));
   const [granularity, setGranularity] = useState<DataGranularity>('area');
   const [dataOutput, setDataOutput] = useState<DataOutputTarget | null>(null);
   const [forecastMode, setForecastMode] = useState<'update' | 'regenerate'>('update');
@@ -70,6 +71,7 @@ export function App() {
     resolve: (accepted: boolean) => void;
   } | null>(null);
   const busy = catalogBusy || buildBusy;
+  const startYearsValid = isValidStartYear(startYearDraft);
 
   const provinces = useMemo(() => {
     const values = [...new Set(catalog.map((item) => item.province).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
@@ -87,6 +89,10 @@ export function App() {
   useEffect(() => {
     void refreshCatalog();
   }, []);
+
+  useEffect(() => {
+    setStartYearDraft(String(defaults.startYear));
+  }, [defaults.startYear]);
 
   async function refreshCatalog() {
     setCatalogBusy(true);
@@ -123,6 +129,12 @@ export function App() {
     setDataSelected([]);
   }
 
+  function changeGlobalStartYear(raw: string) {
+    if (!isYearDraft(raw)) return;
+    setStartYearDraft(raw);
+    if (isValidStartYear(raw)) setDefaults((current) => ({ ...current, startYear: Number(raw) }));
+  }
+
   function toggleForecastArea(area: AreaSelection) {
     setForecastSelected((current) => current.some((item) => item.areaId === area.areaId)
       ? current.filter((item) => item.areaId !== area.areaId)
@@ -149,15 +161,7 @@ export function App() {
   }
 
   function dataPlans(selections: AreaSelection[], mode: 'update' | 'regenerate'): AreaWorkbookPlan[] {
-    return selections.map((selection) => {
-      const startYear = overrides[selection.areaId]?.startYear;
-      return {
-        selection,
-        defaults,
-        override: startYear === undefined ? undefined : { areaId: selection.areaId, startYear },
-        mode,
-      };
-    });
+    return selections.map((selection) => ({ selection, defaults, mode }));
   }
 
   function forecastPlans(): AreaWorkbookPlan[] {
@@ -199,6 +203,10 @@ export function App() {
   }
 
   async function runDataDownload() {
+    if (!startYearsValid) {
+      setStatus({ tone: 'warning', text: `Ingresá un año de 4 dígitos entre ${START_YEAR_MIN} y ${START_YEAR_MAX}.` });
+      return;
+    }
     if (dataSelected.length === 0) {
       setStatus({ tone: 'warning', text: 'Seleccioná al menos un área para descargar.' });
       return;
@@ -365,7 +373,7 @@ export function App() {
                   return (
                     <button type="button" key={area.areaId} className={checked ? 'area-item selected' : 'area-item'} onClick={() => toggleDataArea(area)} disabled={buildBusy} aria-pressed={checked}>
                       <span className="selection-mark">{checked ? '✓' : ''}</span>
-                      <span className="area-copy"><strong>{area.areaName}</strong><small>{area.areaId} · {area.province}</small></span>
+                      <span className="area-copy"><strong>{area.areaName}</strong><small title={`${area.areaId} · ${area.province} · ${companyNames(area)}`}>{area.areaId} · {area.province} · {companyNames(area)}</small></span>
                     </button>
                   );
                 })}
@@ -379,7 +387,7 @@ export function App() {
 
             <section className="panel">
               <SectionHeading step="2" title="Elegí el nivel de la base" description="Una sola tabla, lista para filtrar o analizar" />
-              <label>Año de inicio<input type="number" min="2006" max={new Date().getFullYear()} value={defaults.startYear} onChange={(event) => setDefaults({ ...defaults, startYear: boundedNumber(event.target.value, 2006, new Date().getFullYear(), defaults.startYear) })} /></label>
+              <StartYearField id="start-year-global" label="Año de inicio" value={startYearDraft} onChange={changeGlobalStartYear} />
               <div className="segmented level-selector" role="group" aria-label="Nivel de detalle">
                 <button type="button" className={granularity === 'area' ? 'active' : ''} onClick={() => changeGranularity('area')} aria-pressed={granularity === 'area'}><strong>Por área</strong><small>Un registro por mes; el add-in calcula los totales.</small></button>
                 <button type="button" className={granularity === 'well' ? 'active' : ''} onClick={() => changeGranularity('well')} aria-pressed={granularity === 'well'}><strong>Por pozo</strong><small>Detalle completo de cada pozo y mes.</small></button>
@@ -387,16 +395,11 @@ export function App() {
               {dataSelected.length === 0 ? <div className="empty-state compact">Seleccioná áreas para habilitar la descarga.</div> : (
                 <div className="selected-areas data-selection">
                   {dataSelected.map((area) => {
-                    const startYear = overrides[area.areaId]?.startYear;
                     return (
                       <article className="selected-card" key={area.areaId}>
                         <div className="selected-card-header">
-                          <div><strong>{area.areaName}</strong><span>{area.areaId} · {area.province}</span></div>
+                          <div><strong>{area.areaName}</strong><span title={`${area.areaId} · ${area.province} · ${companyNames(area)}`}>{area.areaId} · {area.province} · {companyNames(area)}</span></div>
                           <button type="button" className="icon-button" onClick={() => toggleDataArea(area)} disabled={busy} aria-label={`Quitar ${area.areaName}`}>×</button>
-                        </div>
-                        <div className="override-row">
-                          <label>Inicio<input type="number" min="2006" max={new Date().getFullYear()} value={startYear ?? defaults.startYear} onChange={(event) => updateOverride(area.areaId, { startYear: boundedNumber(event.target.value, 2006, new Date().getFullYear(), defaults.startYear) })} /></label>
-                          {startYear !== undefined && <button type="button" className="text-button" onClick={() => clearOverride(area.areaId, 'startYear')}>Usar global</button>}
                         </div>
                       </article>
                     );
@@ -484,7 +487,7 @@ export function App() {
         )}
         <p className={`status-message ${status.tone}`} role={status.tone === 'error' ? 'alert' : 'status'}><span />{status.text}</p>
         {workflow === 'data' ? (
-          <button type="button" className="primary" disabled={busy || dataSelected.length === 0 || !dataOutput} onClick={runDataDownload}>{buildBusy ? 'Descargando…' : `Crear tabla ${dataSelected.length ? `(${dataSelected.length} áreas)` : ''}`}</button>
+          <button type="button" className="primary" disabled={busy || dataSelected.length === 0 || !dataOutput || !startYearsValid} onClick={runDataDownload}>{buildBusy ? 'Descargando…' : `Crear tabla ${dataSelected.length ? `(${dataSelected.length} áreas)` : ''}`}</button>
         ) : (
           <button type="button" className="primary forecast-action" disabled={busy || forecastSelected.length === 0} onClick={runForecast}>{buildBusy ? 'Generando…' : `Generar pronósticos ${forecastSelected.length ? `(${forecastSelected.length})` : ''}`}</button>
         )}
@@ -541,16 +544,55 @@ function OverrideSelect({ label, value, globalValue, options, onChange }: { labe
   return <label>{label}<select value={value ?? ''} onChange={(event) => onChange(event.target.value)}><option value="">Global ({globalValue})</option>{options.map((option) => <option key={option}>{option}</option>)}</select></label>;
 }
 
+function StartYearField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
+  const valid = isValidStartYear(value);
+  const errorId = `${id}-error`;
+  return (
+    <label>{label}
+      <input
+        id={id}
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        maxLength={4}
+        pattern="[0-9]{4}"
+        value={value}
+        aria-invalid={!valid}
+        aria-describedby={!valid ? errorId : undefined}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {!valid && <small id={errorId} className="field-error">Usá 4 dígitos ({START_YEAR_MIN}–{START_YEAR_MAX}).</small>}
+    </label>
+  );
+}
+
 function boundedNumber(raw: string, min: number, max: number, fallback: number): number {
   const value = Number(raw);
   if (!Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, Math.round(value)));
 }
 
+const START_YEAR_MIN = 2006;
+const START_YEAR_MAX = new Date().getFullYear();
+
+export function isYearDraft(value: string): boolean {
+  return /^\d{0,4}$/.test(value);
+}
+
+export function isValidStartYear(value: string): boolean {
+  if (!/^\d{4}$/.test(value)) return false;
+  const year = Number(value);
+  return year >= START_YEAR_MIN && year <= START_YEAR_MAX;
+}
+
 function formatSavedDate(value?: string): string {
   if (!value) return 'sin fecha';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 'sin fecha' : date.toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function companyNames(area: Pick<AreaCatalogItem, 'companies'>): string {
+  return area.companies.filter(Boolean).join(', ') || 'Empresa no informada';
 }
 
 async function logDebugSafely(step: string, status: 'info' | 'ok' | 'warning' | 'error', detail: string): Promise<void> {
