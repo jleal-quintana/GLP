@@ -1,6 +1,6 @@
 import type { AreaCatalogItem, CapituloIvDownloadEventHandler, MonthlyAggregate, ProductionRecord } from '../models/types';
 import { parseCsv, parseCsvLine } from './csv';
-import { catalogProxyUrl, fetchWithRetry } from './http';
+import { catalogProxyUrl, fetchWithRetry, filteredProductionProxyUrl } from './http';
 
 const API_ACTION_URL = 'https://datos.gob.ar/api/3/action';
 const DATASET_ID = 'produccion-de-petroleo-y-gas-por-pozo';
@@ -115,6 +115,31 @@ async function streamResourceCsv(
   return rowCount;
 }
 
+async function loadAreaProductionResource(
+  resource: CkanResource,
+  areaId: string,
+  onRecord: (record: Record<string, string>) => void,
+): Promise<number> {
+  const filteredUrl = filteredProductionProxyUrl(resource.url, areaId);
+  if (!filteredUrl) return streamResourceCsv(resource, onRecord);
+
+  const response = await fetchWithRetry(filteredUrl);
+  if (!response.ok) {
+    const detail = (await response.text()).trim();
+    throw new Error(
+      `No se pudo descargar ${resource.name} (HTTP ${response.status})${detail ? `: ${detail}` : '.'}`,
+    );
+  }
+  const payload = await response.json();
+  if (!payload || !Number.isFinite(payload.scannedRows) || !Array.isArray(payload.records)) {
+    throw new Error(`El servicio de datos devolvió una respuesta inválida para ${resource.name}.`);
+  }
+  for (const record of payload.records) {
+    if (record && typeof record === 'object') onRecord(record as Record<string, string>);
+  }
+  return payload.scannedRows as number;
+}
+
 function recordFromLine(headers: string[], line: string): Record<string, string> {
   const cols = parseCsvLine(line);
   const record: Record<string, string> = {};
@@ -222,7 +247,7 @@ export async function fetchAreaProduction(
     await onEvent?.({ type: 'resource_started', areaId: area.areaId, source: 'capitulo-iv', year });
     let matched = 0;
     const matchedRows: ProductionRecord[] = [];
-    const rows = await streamResourceCsv(resource, (row) => {
+    const rows = await loadAreaProductionResource(resource, area.areaId, (row) => {
       const normalized = normalizeProductionRecord(row, area.areaId, area.areaName);
       if (!normalized) return;
       const key = `${normalized.wellName}|${normalized.wellId}|${normalized.year}|${normalized.month}`;

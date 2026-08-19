@@ -18,7 +18,10 @@ export async function fetchWithRetry(url: string, attempts = 4): Promise<Respons
     }
     await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
   }
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  const detail = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(
+    `No se pudo conectar con el servicio de datos de CapIV. Verificá tu conexión y reintentá. (${detail})`,
+  );
 }
 
 export function catalogProxyUrl(): string | undefined {
@@ -28,6 +31,18 @@ export function catalogProxyUrl(): string | undefined {
   const proxyBase = typeof CAPIV_PROXY_BASE_URL === 'string' ? CAPIV_PROXY_BASE_URL.trim() : '';
   if (!proxyBase) return undefined;
   return `${proxyBase}${proxyBase.includes('?') ? '&' : '?'}catalog=1`;
+}
+
+export function filteredProductionProxyUrl(url: string, areaId: string): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return undefined;
+  const proxyBase = typeof CAPIV_PROXY_BASE_URL === 'string' ? CAPIV_PROXY_BASE_URL.trim() : '';
+  if (!proxyBase) return undefined;
+  const proxyUrl = proxyBase.includes('{url}')
+    ? proxyBase.replace('{url}', encodeURIComponent(url))
+    : `${proxyBase}${proxyBase.includes('?') ? '&' : '?'}url=${encodeURIComponent(url)}`;
+  return `${proxyUrl}&areaId=${encodeURIComponent(areaId)}`;
 }
 
 function proxiedUrl(url: string): string {

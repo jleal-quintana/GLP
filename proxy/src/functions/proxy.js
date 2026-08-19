@@ -1,4 +1,5 @@
 const { app } = require('@azure/functions');
+const { BlobServiceClient } = require('@azure/storage-blob');
 const { parse } = require('csv-parse');
 const { Readable } = require('node:stream');
 
@@ -8,7 +9,15 @@ const ALLOWED_ORIGINS = new Set([
   'https://localhost:3002',
 ]);
 const DATASET_URL = 'https://datos.gob.ar/api/3/action/package_show?id=produccion-de-petroleo-y-gas-por-pozo';
+const PRODUCTION_CONTAINER = 'production-cache';
+const CURRENT_YEAR_CACHE_MS = 6 * 60 * 60 * 1000;
 let catalogCache;
+const productionCache = new Map();
+let productionContainerPromise;
+
+// Annual production files can exceed 200 MB. Azure Functions must explicitly
+// enable HTTP streaming or the runtime buffers/cuts large upstream responses.
+app.setup({ enableHttpStream: true });
 
 app.http('proxy', {
   methods: ['GET', 'OPTIONS'],
@@ -50,6 +59,16 @@ app.http('proxy', {
     }
 
     try {
+      const areaId = request.query.get('areaId');
+      if (areaId) {
+        const filtered = await filterProductionByArea(target, validateAreaId(areaId));
+        return {
+          status: 200,
+          headers: { ...corsHeaders, 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=900' },
+          jsonBody: filtered,
+        };
+      }
+
       const upstream = await fetchAllowed(target);
       const headers = {
         ...corsHeaders,
@@ -68,6 +87,151 @@ app.http('proxy', {
     }
   },
 });
+
+async function filterProductionByArea(target, areaId) {
+  const cacheKey = `${target.toString()}|${areaId}`;
+  const cached = productionCache.get(cacheKey);
+  if (cached?.expiresAt > Date.now()) return cached.value;
+  if (cached) productionCache.delete(cacheKey);
+
+  const persisted = await loadPreFilteredProduction(target, areaId);
+  if (persisted) {
+    productionCache.set(cacheKey, { value: persisted, expiresAt: Date.now() + 15 * 60 * 1000 });
+    return persisted;
+  }
+
+  const source = await getProductionSource(target);
+
+  let scannedRows = 0;
+  const records = [];
+  const parser = source.pipe(parse({
+    bom: true,
+    columns: (headers) => headers.map((header) => String(header).trim().toLowerCase()),
+    skip_empty_lines: true,
+    relax_column_count: true,
+  }));
+
+  for await (const row of parser) {
+    scannedRows++;
+    if (textValue(row.idareapermisoconcesion, row.cod_area) !== areaId) continue;
+    records.push({
+      idareapermisoconcesion: areaId,
+      idpozo: textValue(row.idpozo),
+      sigla: textValue(row.sigla),
+      anio: textValue(row.anio),
+      mes: textValue(row.mes),
+      prod_pet: textValue(row.prod_pet, row.prod_petroleo, row.petroleo),
+      prod_gas: textValue(row.prod_gas, row.gas),
+      prod_agua: textValue(row.prod_agua, row.agua),
+      iny_agua: textValue(row.iny_agua, row.agua_iny, row.inyeccion_agua),
+    });
+  }
+
+  const value = { scannedRows, records };
+  await persistFilteredProduction(target, areaId, records);
+  productionCache.set(cacheKey, { value, expiresAt: Date.now() + 15 * 60 * 1000 });
+  if (productionCache.size > 40) {
+    const oldestKey = productionCache.keys().next().value;
+    if (oldestKey) productionCache.delete(oldestKey);
+  }
+  return value;
+}
+
+async function loadPreFilteredProduction(target, areaId) {
+  const year = productionYear(target);
+  if (!year || !process.env.AzureWebJobsStorage) return undefined;
+  try {
+    const container = await getProductionContainer();
+    const recordsBlob = container.getBlobClient(`filtered/${year}/${encodeURIComponent(areaId)}.ndjson`);
+    const properties = await recordsBlob.getProperties();
+    if (year === new Date().getUTCFullYear()
+      && Date.now() - properties.lastModified.getTime() >= CURRENT_YEAR_CACHE_MS) return undefined;
+    const recordsBuffer = await recordsBlob.downloadToBuffer();
+    let scannedRows;
+    try {
+      const markerBuffer = await container.getBlobClient(`filtered/${year}/_complete.json`).downloadToBuffer();
+      scannedRows = Number(JSON.parse(markerBuffer.toString('utf8')).scannedRows);
+    } catch (error) {
+      if (error.statusCode !== 404) throw error;
+    }
+    const records = recordsBuffer.toString('utf8')
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    return { scannedRows: scannedRows || records.length, records };
+  } catch (error) {
+    if (error.statusCode !== 404) console.warn(`No se pudo leer el recorte ${year}/${areaId}: ${error.message}`);
+    return undefined;
+  }
+}
+
+async function persistFilteredProduction(target, areaId, records) {
+  const year = productionYear(target);
+  if (!year || !process.env.AzureWebJobsStorage) return;
+  try {
+    const container = await getProductionContainer();
+    const body = records.map((record) => JSON.stringify(record)).join('\n') + (records.length ? '\n' : '');
+    await container
+      .getBlockBlobClient(`filtered/${year}/${encodeURIComponent(areaId)}.ndjson`)
+      .uploadData(Buffer.from(body), { blobHTTPHeaders: { blobContentType: 'application/x-ndjson; charset=utf-8' } });
+  } catch (error) {
+    console.warn(`No se pudo guardar el recorte ${year}/${areaId}: ${error.message}`);
+  }
+}
+
+async function getProductionSource(target) {
+  const year = productionYear(target);
+  if (year && process.env.AzureWebJobsStorage) {
+    try {
+      const container = await getProductionContainer();
+      const blob = container.getBlobClient(`${year}.csv`);
+      let properties;
+      try {
+        properties = await blob.getProperties();
+      } catch (error) {
+        if (error.statusCode !== 404) throw error;
+      }
+
+      const currentYear = new Date().getUTCFullYear();
+      const isFresh = properties?.contentLength > 0 && properties.copyStatus !== 'pending'
+        && (year < currentYear || Date.now() - properties.lastModified.getTime() < CURRENT_YEAR_CACHE_MS);
+      if (!isFresh) {
+        const poller = await blob.beginCopyFromURL(target.toString(), { intervalInMs: 2000 });
+        await poller.pollUntilDone();
+      }
+
+      const download = await blob.download();
+      if (download.readableStreamBody) return download.readableStreamBody;
+    } catch (error) {
+      // Keep the official source as a fallback while the cache is being seeded.
+      console.warn(`No se pudo usar el cache ${year}: ${error.message}`);
+    }
+  }
+
+  const response = await fetchAllowed(target);
+  if (!response.ok || !response.body) throw new Error(`recurso anual HTTP ${response.status}`);
+  return Readable.fromWeb(response.body);
+}
+
+async function getProductionContainer() {
+  if (!productionContainerPromise) {
+    productionContainerPromise = (async () => {
+      const service = BlobServiceClient.fromConnectionString(process.env.AzureWebJobsStorage);
+      const container = service.getContainerClient(PRODUCTION_CONTAINER);
+      await container.createIfNotExists();
+      return container;
+    })().catch((error) => {
+      productionContainerPromise = undefined;
+      throw error;
+    });
+  }
+  return productionContainerPromise;
+}
+
+function productionYear(target) {
+  const match = decodeURIComponent(target.pathname).match(/(?:19|20)\d{2}/g);
+  return match ? Number(match[match.length - 1]) : undefined;
+}
 
 async function buildAreaCatalog() {
   if (catalogCache && catalogCache.expiresAt > Date.now()) return catalogCache.value;
@@ -126,6 +290,14 @@ function normalize(value) {
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function validateAreaId(areaId) {
+  const value = String(areaId).trim();
+  if (!value || value.length > 100 || /[\u0000-\u001f]/.test(value)) {
+    throw new Error('El identificador de área no es válido.');
+  }
+  return value;
 }
 
 function validateTarget(rawUrl) {
