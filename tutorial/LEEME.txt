@@ -1,4 +1,4 @@
-GLP - Instalación en Microsoft Excel
+CapIV - Instalación en Microsoft Excel
 ====================================
 
 Requisitos
@@ -14,14 +14,22 @@ Instalación
 3. Esperar el mensaje "LISTO - Instalación completada".
 4. Abrir Excel con un libro nuevo.
 5. Ir a Inicio > Complementos > Más complementos.
-6. Abrir Complementos de desarrollador y seleccionar GLP.
+6. Abrir Complementos de desarrollador y seleccionar CapIV.
+
+Descarga de datos
+-----------------
+En el flujo Datos, elegir las áreas, el año inicial y el nivel Área o Pozo. Seleccionar una celda en Excel, pulsar "Usar celda seleccionada" y luego "Crear tabla". CapIV avisará antes de sobrescribir contenido.
 
 Actualización mensual
 ---------------------
-Abrir el libro generado anteriormente y pulsar "Actualizar libro" al comienzo del panel. GLP detectará las áreas existentes, incorporará meses nuevos y conservará los supuestos editados.
+Abrir el mismo Excel y pulsar "Actualizar datos". CapIV recordará áreas, nivel y ubicación, e incorporará automáticamente el último mes publicado sin duplicados.
+
+Pronósticos
+-----------
+Es un flujo opcional e independiente. No hace falta usarlo para descargar una base.
 
 Desinstalación
 --------------
 Cerrar Excel y ejecutar desinstalar.bat.
 
-La guía completa se encuentra en GLP_Tutorial_Lanzamiento.pdf.
+La guía completa se encuentra en CapIV_Tutorial_Lanzamiento.pdf.

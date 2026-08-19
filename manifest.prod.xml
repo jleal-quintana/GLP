@@ -5,10 +5,10 @@
   xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
   xsi:type="TaskPaneApp">
   <Id>6fd19b4b-12f0-4fb7-86fe-3eeb5efb7f20</Id>
-  <Version>1.1.0.0</Version>
+  <Version>1.2.0.0</Version>
   <ProviderName>Quintana Energy</ProviderName>
   <DefaultLocale>es-AR</DefaultLocale>
-  <DisplayName DefaultValue="GLP" />
+  <DisplayName DefaultValue="CapIV" />
   <Description DefaultValue="Add-in de Excel para descargar el histórico de Capítulo IV, proyectar áreas y generar gráficos." />
   <IconUrl DefaultValue="https://jleal-quintana.github.io/GLP/assets/icon-32.png" />
   <HighResolutionIconUrl DefaultValue="https://jleal-quintana.github.io/GLP/assets/icon-80.png" />
@@ -84,9 +84,9 @@
         <bt:Url id="Taskpane.Url" DefaultValue="https://jleal-quintana.github.io/GLP/taskpane.html" />
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="GetStarted.Title" DefaultValue="GLP" />
+        <bt:String id="GetStarted.Title" DefaultValue="CapIV" />
         <bt:String id="CapIV.GroupLabel" DefaultValue="Quintana Energy" />
-        <bt:String id="CapIV.ButtonLabel" DefaultValue="Abrir GLP" />
+        <bt:String id="CapIV.ButtonLabel" DefaultValue="Abrir CapIV" />
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Descarga historico Capitulo IV y arma proyecciones por area en Excel." />

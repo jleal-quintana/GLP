@@ -1,4 +1,4 @@
-# GLP - Capítulo IV
+# CapIV para Excel
 
 Add-in de Excel para consultar la información oficial de Capítulo IV, construir históricos por área, proyectar producción y pozos, y consolidar resultados.
 
@@ -37,7 +37,9 @@ npx office-addin-dev-certs install
 
 ### Actualizar un libro existente
 
-Al abrir un archivo generado anteriormente, usar **Actualizar libro** al comienzo del panel. GLP recupera las áreas y la configuración desde `_CapIV_State`, vuelve a consultar la serie oficial completa e incorpora meses nuevos o correcciones sin duplicar registros. Los supuestos editados en las hojas de pronóstico se conservan.
+El flujo **Datos** crea una única tabla plana en la celda elegida por el usuario. Puede salir agregada por área y mes o detallada por pozo-mes. Antes de escribir sobre contenido existente, CapIV muestra el rango afectado y exige confirmación.
+
+Al abrir un archivo generado anteriormente, usar **Actualizar datos**. CapIV recupera áreas, nivel y celda desde `_CapIV_State`, vuelve a consultar la serie oficial completa e incorpora el último mes o correcciones sin duplicar registros. El flujo **Pronósticos** es opcional e independiente.
 
 ## Salida en el libro
 
@@ -67,7 +69,7 @@ Los metadatos se consultan directamente en Datos Argentina. Los CSV de producci�
 https://proxy.ejemplo/?url={url}
 ```
 
-También se admite una base sin plantilla, a la que GLP agrega `?url=`. El proxy debe limitarse por allowlist a `datos.gob.ar` y `datos.energia.gob.ar`, conservar streaming y no registrar datos sensibles. En GitHub Pages, crear la variable de repositorio `CAPIV_PROXY_BASE_URL`; el workflow ya la incorpora al build.
+También se admite una base sin plantilla, a la que CapIV agrega `?url=`. El proxy debe limitarse por allowlist a `datos.gob.ar` y `datos.energia.gob.ar`, conservar streaming y no registrar datos sensibles. En GitHub Pages, crear la variable de repositorio `CAPIV_PROXY_BASE_URL`; el workflow ya la incorpora al build.
 
 Sin ese proxy, el modo local sigue funcionando mediante el proxy del servidor de desarrollo incluido.
 

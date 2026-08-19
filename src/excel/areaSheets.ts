@@ -23,12 +23,22 @@ export async function writeAreaSheets(
   warnings: string[],
   middleMissingPolicy: 'blank' | 'zero',
 ): Promise<void> {
+  await writeAreaDataSheets(plan, records, monthly, warnings, middleMissingPolicy);
+  await writeAreaForecastSheets(plan, monthly, middleMissingPolicy);
+}
+
+export async function writeAreaDataSheets(
+  plan: AreaWorkbookPlan,
+  records: ProductionRecord[],
+  monthly: MonthlyAggregate[],
+  warnings: string[],
+  middleMissingPolicy: 'blank' | 'zero',
+): Promise<void> {
   const names = areaSheetNames(plan.selection.areaId);
-  const preserved = plan.mode === 'update' ? await readExistingSettings(names.prono, names.pozos) : undefined;
   await Excel.run(async (context) => {
     await ensureDebugSheet(context);
     if (plan.mode === 'regenerate') {
-      await deleteIfExists(context, Object.values(names));
+      await deleteIfExists(context, [names.hdp, names.detalle]);
     }
     await context.sync();
   });
@@ -43,6 +53,25 @@ export async function writeAreaSheets(
     writeHdpTable(hdp, plan, monthly, middleMissingPolicy);
   });
 
+  await writeAreaSheet(plan.selection.areaId, 'Detalle', names.detalle, async (detalle) => {
+    writeDetailSheet(detalle, records);
+  });
+}
+
+export async function writeAreaForecastSheets(
+  plan: AreaWorkbookPlan,
+  monthly: MonthlyAggregate[],
+  middleMissingPolicy: 'blank' | 'zero',
+): Promise<void> {
+  const names = areaSheetNames(plan.selection.areaId);
+  const preserved = plan.mode === 'update' ? await readExistingSettings(names.prono, names.pozos) : undefined;
+  await Excel.run(async (context) => {
+    await ensureDebugSheet(context);
+    if (plan.mode === 'regenerate') {
+      await deleteIfExists(context, [names.prono, names.pozos, names.graficos]);
+    }
+    await context.sync();
+  });
   await writeAreaSheet(plan.selection.areaId, 'Prono', names.prono, async (prono) => {
     writePronoSheet(prono, plan, monthly, middleMissingPolicy);
     if (preserved?.prono) restorePronoSettings(prono, preserved.prono);
@@ -50,9 +79,6 @@ export async function writeAreaSheets(
   await writeAreaSheet(plan.selection.areaId, 'Pozos', names.pozos, async (pozos) => {
     writePozosSheet(pozos, plan, monthly, middleMissingPolicy);
     if (preserved?.pozos) restorePozosSettings(pozos, preserved.pozos);
-  });
-  await writeAreaSheet(plan.selection.areaId, 'Detalle', names.detalle, async (detalle) => {
-    writeDetailSheet(detalle, records);
   });
   await writeAreaSheet(plan.selection.areaId, 'Graficos', names.graficos, async (graficos, context) => {
     writeChartsSheet(context, graficos, plan, monthly.length);

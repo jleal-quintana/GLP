@@ -1,15 +1,15 @@
 @echo off
 setlocal
 chcp 65001 >nul
-title Instalador - GLP (Quintana Energy)
+title Instalador - CapIV (Quintana Energy)
 
 set "ADDIN_DIR=%USERPROFILE%\AppData\Roaming\Microsoft\AddIns"
-set "MANIFEST=%ADDIN_DIR%\glp-manifest.prod.xml"
+set "MANIFEST=%ADDIN_DIR%\capiv-manifest.prod.xml"
 set "MANIFEST_URL=https://github.com/jleal-quintana/GLP/raw/main/manifest.prod.xml"
 
 echo.
 echo ============================================================
-echo   GLP - Instalador para Excel
+echo   CapIV - Instalador para Excel
 echo   Quintana Energy
 echo ============================================================
 echo.
@@ -30,7 +30,8 @@ if not exist "%MANIFEST%" (
 )
 
 echo [3/3] Registrando complemento en Excel...
-reg add "HKCU\Software\Microsoft\Office\16.0\WEF\Developer" /v "GLP" /t REG_SZ /d "%MANIFEST%" /f >nul
+reg delete "HKCU\Software\Microsoft\Office\16.0\WEF\Developer" /v "GLP" /f >nul 2>nul
+reg add "HKCU\Software\Microsoft\Office\16.0\WEF\Developer" /v "CapIV" /t REG_SZ /d "%MANIFEST%" /f >nul
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -51,7 +52,7 @@ echo  1. Cerrar Excel completamente si lo tenes abierto.
 echo  2. Volver a abrir Excel con un libro nuevo.
 echo  3. Pestana HOME/Inicio - boton ADD-INS al final de la cinta.
 echo  4. En el menu, abajo, click en MORE ADD-INS.
-echo  5. Tab DEVELOPER ADD-INS - click en GLP.
+echo  5. Tab DEVELOPER ADD-INS - click en CapIV.
 echo  6. El panel se abre a la derecha.
 echo.
 pause

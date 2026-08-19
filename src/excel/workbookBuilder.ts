@@ -1,24 +1,24 @@
 import type {
   AreaWorkbookPlan,
   BuildProgressHandler,
+  DataOutputTarget,
   MissingMonthsDecisionHandler,
   MonthlyAggregate,
+  WorkbookAreaData,
+  OverwriteDecisionHandler,
 } from '../models/types';
 import { evaluateForecast, lastNonMissing, resolveForecastMethods } from '../domain/forecast';
 import { aggregateMonthly, countProductionResources, fetchAreaProduction } from '../services/capiv';
 import { appendDebug, createDebugEntry } from './debugSheet';
-import { writeAreaSheets } from './areaSheets';
+import { writeAreaForecastSheets } from './areaSheets';
+import { writeDatabaseTable } from './databaseSheet';
 import { appendDownloadLedgerEvent, ensureDownloadLedger } from './downloadLedger';
 import { areaSheetNames, SUMMARY_SHEET, STATE_SHEET } from './names';
 import { addLineChart, getOrAddSheet, writeMatrix, writeTable, writeTitle } from './sheetLayout';
+import { readSavedWorkbookPlans } from './workbookState';
 
-interface BuildResult {
-  areaId: string;
-  areaName: string;
-  monthly: MonthlyAggregate[];
+interface BuildResult extends WorkbookAreaData {
   summary: SummaryMonthly[];
-  warnings: string[];
-  middleMissingPolicy: 'blank' | 'zero';
 }
 
 interface SummaryMonthly {
@@ -30,11 +30,14 @@ interface SummaryMonthly {
   kind: 'hist' | 'prono';
 }
 
-export async function buildWorkbook(
+export async function downloadWorkbookData(
   plans: AreaWorkbookPlan[],
+  output: DataOutputTarget,
   onProgress?: BuildProgressHandler,
   onMissingMonths?: MissingMonthsDecisionHandler,
+  onOverwrite?: OverwriteDecisionHandler,
 ): Promise<void> {
+  const saved = await readSavedWorkbookPlans();
   const total = estimateWorkUnits(plans);
   let completed = 0;
   const report = (message: string, plan?: AreaWorkbookPlan, areaIndex?: number, increment = 0) => {
@@ -53,7 +56,7 @@ export async function buildWorkbook(
   report('Iniciando workbook');
   await appendDebug(createDebugEntry('Inicio', 'info', `Areas seleccionadas: ${plans.map((p) => p.selection.areaId).join(', ')}`));
 
-  const results: BuildResult[] = [];
+  const results: Array<{ plan: AreaWorkbookPlan; data: WorkbookAreaData; records: import('../models/types').ProductionRecord[] }> = [];
   for (const [index, plan] of plans.entries()) {
     const areaIndex = index + 1;
     const startYear = plan.override?.startYear ?? plan.selection.startYearOverride ?? plan.defaults.startYear;
@@ -106,20 +109,15 @@ export async function buildWorkbook(
       if (warnings.length > 0) {
         await appendDebug(createDebugEntry(plan.selection.areaId, 'warning', `Meses intermedios faltantes: ${warnings.join(', ')}. Politica: ${middleMissingPolicy}`));
       }
-      const summary = buildAreaSummary(plan, monthly, middleMissingPolicy);
-      report(`Preparando hojas ${plan.selection.areaId}`, plan, areaIndex, 1);
-      await appendDebug(createDebugEntry(plan.selection.areaId, 'info', `Escritura de hojas iniciada`));
-      await writeAreaSheets(plan, records, monthly, warnings, middleMissingPolicy);
-      report(`Hojas escritas ${plan.selection.areaId}`, plan, areaIndex, 1);
-      await appendDebug(createDebugEntry(plan.selection.areaId, 'ok', `Hojas escritas. Filas resumen area: ${summary.length}`));
-      results.push({
+      report(`Preparando base ${plan.selection.areaId}`, plan, areaIndex, 1);
+      const data = {
         areaId: plan.selection.areaId,
         areaName: plan.selection.areaName,
         monthly,
-        summary,
         warnings,
         middleMissingPolicy,
-      });
+      } satisfies WorkbookAreaData;
+      results.push({ plan, data, records });
     } catch (error) {
       const detail = error instanceof Error ? error.stack ?? error.message : String(error);
       await appendDebug(createDebugEntry(plan.selection.areaId, 'error', detail));
@@ -127,16 +125,79 @@ export async function buildWorkbook(
     }
   }
 
-  report(`Escribiendo resumen consolidado`, undefined, undefined, 1);
-  await appendDebug(createDebugEntry('Resumen_Areas', 'info', `Escritura resumen consolidado para ${results.length} areas`));
-  await writeSummary(results);
-  await appendDebug(createDebugEntry('Resumen_Areas', 'ok', 'Resumen consolidado escrito'));
-  report(`Guardando estado del workbook`, undefined, undefined, 1);
+  report('Escribiendo tabla en la celda elegida', undefined, undefined, 1);
+  const written = await writeDatabaseTable(output, results, onOverwrite);
+  await appendDebug(createDebugEntry('Base de datos', 'ok', `${written.rowCount} filas escritas en ${written.rangeAddress}`));
+  report('Guardando datos del workbook', undefined, undefined, 1);
   await appendDebug(createDebugEntry(STATE_SHEET, 'info', 'Guardando estado oculto'));
-  await writeState(plans, results);
+  const mergedPlans = mergePlans(saved?.plans ?? [], plans);
+  const mergedData = mergeData(saved?.data ?? [], results.map((result) => result.data));
+  await writeState(mergedPlans, mergedData, {
+    dataSavedAt: new Date().toISOString(),
+    forecastSavedAt: saved?.forecastSavedAt,
+  }, output);
   await appendDebug(createDebugEntry(STATE_SHEET, 'ok', 'Estado guardado'));
-  report(`Workbook actualizado`, undefined, undefined, total - completed);
-  await appendDebug(createDebugEntry('Fin', 'ok', 'Workbook actualizado'));
+  report('Datos actualizados', undefined, undefined, total - completed);
+  await appendDebug(createDebugEntry('Fin datos', 'ok', 'Descarga de datos completada'));
+}
+
+export async function buildForecastWorkbook(
+  plans: AreaWorkbookPlan[],
+  onProgress?: BuildProgressHandler,
+): Promise<void> {
+  const saved = await readSavedWorkbookPlans();
+  if (!saved || saved.data.length === 0) {
+    throw new Error('No hay datos descargados en este libro. Completá primero el flujo Datos.');
+  }
+
+  const total = plans.length * 3 + 2;
+  let completed = 0;
+  const report = (message: string, plan?: AreaWorkbookPlan, areaIndex?: number, increment = 0) => {
+    completed = Math.min(total, completed + increment);
+    onProgress?.({
+      areaId: plan?.selection.areaId,
+      areaIndex,
+      areaTotal: plans.length,
+      completed,
+      total,
+      percent: total ? Math.round((completed / total) * 100) : 0,
+      message,
+    });
+  };
+
+  report('Leyendo datos del libro');
+  await appendDebug(createDebugEntry('Inicio pronósticos', 'info', `Áreas: ${plans.map((plan) => plan.selection.areaId).join(', ')}`));
+  const results: BuildResult[] = [];
+  for (const [index, plan] of plans.entries()) {
+    const areaIndex = index + 1;
+    const data = saved.data.find((item) => item.areaId === plan.selection.areaId);
+    if (!data) throw new Error(`No hay datos descargados para ${plan.selection.areaId}.`);
+
+    report(`Preparando pronóstico ${plan.selection.areaId}`, plan, areaIndex, 1);
+    const summary = buildAreaSummary(plan, data.monthly, data.middleMissingPolicy);
+    await writeAreaForecastSheets(plan, data.monthly, data.middleMissingPolicy);
+    report(`Pronóstico escrito ${plan.selection.areaId}`, plan, areaIndex, 1);
+    results.push({ ...data, summary });
+    await appendDebug(createDebugEntry(plan.selection.areaId, 'ok', `Pronóstico generado: ${summary.length} meses`));
+    report(`Área ${plan.selection.areaId} completada`, plan, areaIndex, 1);
+  }
+
+  report('Escribiendo resumen consolidado', undefined, undefined, 1);
+  await writeSummary(results);
+  const forecastSavedAt = new Date().toISOString();
+  await writeState(mergePlans(saved.plans, plans), saved.data, { dataSavedAt: saved.dataSavedAt, forecastSavedAt }, saved.dataOutput);
+  report('Pronósticos actualizados', undefined, undefined, total - completed);
+  await appendDebug(createDebugEntry('Fin pronósticos', 'ok', 'Pronósticos y resumen actualizados'));
+}
+
+export async function buildWorkbook(
+  plans: AreaWorkbookPlan[],
+  output: DataOutputTarget,
+  onProgress?: BuildProgressHandler,
+  onMissingMonths?: MissingMonthsDecisionHandler,
+): Promise<void> {
+  await downloadWorkbookData(plans, output, onProgress, onMissingMonths);
+  await buildForecastWorkbook(plans, onProgress);
 }
 
 function estimateWorkUnits(plans: AreaWorkbookPlan[]): number {
@@ -146,6 +207,18 @@ function estimateWorkUnits(plans: AreaWorkbookPlan[]): number {
     const startYear = plan.override?.startYear ?? plan.selection.startYearOverride ?? plan.defaults.startYear;
     return total + countProductionResources(startYear) + perAreaFixedSteps;
   }, globalSteps);
+}
+
+function mergePlans(existing: AreaWorkbookPlan[], replacements: AreaWorkbookPlan[]): AreaWorkbookPlan[] {
+  const byArea = new Map(existing.map((plan) => [plan.selection.areaId, plan]));
+  for (const plan of replacements) byArea.set(plan.selection.areaId, plan);
+  return [...byArea.values()];
+}
+
+function mergeData(existing: WorkbookAreaData[], replacements: WorkbookAreaData[]): WorkbookAreaData[] {
+  const byArea = new Map(existing.map((data) => [data.areaId, data]));
+  for (const data of replacements) byArea.set(data.areaId, data);
+  return [...byArea.values()];
 }
 
 async function writeSummary(results: BuildResult[]): Promise<void> {
@@ -173,12 +246,17 @@ async function writeSummary(results: BuildResult[]): Promise<void> {
   });
 }
 
-async function writeState(plans: AreaWorkbookPlan[], results: BuildResult[]): Promise<void> {
+async function writeState(
+  plans: AreaWorkbookPlan[],
+  results: WorkbookAreaData[],
+  timestamps: { dataSavedAt?: string; forecastSavedAt?: string },
+  dataOutput?: DataOutputTarget,
+): Promise<void> {
   await Excel.run(async (context) => {
     const sheet = await getOrAddSheet(context, STATE_SHEET);
     sheet.visibility = Excel.SheetVisibility.veryHidden;
     sheet.getRange().clear();
-    writeWorkbookState(sheet, { schema: 1, plans, results, savedAt: new Date().toISOString() });
+    writeWorkbookState(sheet, { schema: 3, plans, results, savedAt: new Date().toISOString(), ...timestamps, dataOutput });
     await context.sync();
   });
 }

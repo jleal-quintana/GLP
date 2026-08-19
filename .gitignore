@@ -7,3 +7,5 @@ tmp/
 *.xlsm
 ~$*
 /glp-installer.zip
+/capiv-installer.zip
+/proxy-deploy.zip

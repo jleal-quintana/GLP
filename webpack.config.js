@@ -107,8 +107,8 @@ module.exports = async (_env, argv) => {
           { from: "manifest.xml", to: "manifest.xml" },
           { from: "assets", to: "assets", noErrorOnMissing: false },
           { from: "tutorial/instalacion.html", to: "instalacion.html" },
-          { from: "tutorial/glp-installer.zip", to: "glp-installer.zip" },
-          { from: "output/pdf/GLP_Tutorial_Lanzamiento.pdf", to: "GLP_Tutorial_Lanzamiento.pdf" }
+          { from: "tutorial/capiv-installer.zip", to: "capiv-installer.zip" },
+          { from: "output/pdf/CapIV_Tutorial_Lanzamiento.pdf", to: "CapIV_Tutorial_Lanzamiento.pdf" }
         ]
       })
     ],

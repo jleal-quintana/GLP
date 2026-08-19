@@ -99,6 +99,32 @@ export interface AreaWorkbookPlan {
   mode: 'update' | 'regenerate';
 }
 
+export interface WorkbookAreaData {
+  areaId: string;
+  areaName: string;
+  monthly: MonthlyAggregate[];
+  warnings: string[];
+  middleMissingPolicy: 'blank' | 'zero';
+}
+
+export type DataGranularity = 'area' | 'well';
+
+export interface DataOutputTarget {
+  sheetName: string;
+  startAddress: string;
+  granularity: DataGranularity;
+  tableName: string;
+}
+
+export interface OverwriteWarning {
+  sheetName: string;
+  rangeAddress: string;
+  occupiedCells: number;
+  overlappingTables: string[];
+}
+
+export type OverwriteDecisionHandler = (warning: OverwriteWarning) => Promise<boolean>;
+
 export interface BuildProgress {
   areaId?: string;
   areaIndex?: number;

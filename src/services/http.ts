@@ -37,6 +37,6 @@ function proxiedUrl(url: string): string {
       : `${proxyBase}${proxyBase.includes('?') ? '&' : '?'}url=${encodeURIComponent(url)}`;
   }
   throw new Error(
-    'La descarga de producción requiere un proxy HTTPS. Ejecutá GLP localmente o configurá CAPIV_PROXY_BASE_URL para la publicación.',
+    'La descarga de producción requiere el servicio HTTPS de CapIV. Contactá al equipo de soporte.',
   );
 }
