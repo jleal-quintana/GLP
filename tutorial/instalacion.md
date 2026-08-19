@@ -14,8 +14,8 @@ Para quitarlo, cerrar Excel y ejecutar `desinstalar.bat` desde la misma carpeta 
 
 ## Descargar y actualizar una base
 
-En **Datos**, elegir áreas, año inicial, nivel Área o Pozo y una celda de destino. CapIV avisa antes de sobrescribir contenido. Para incorporar el último mes disponible, abrir el mismo Excel y pulsar **Actualizar datos**.
+En **Datos**, elegir áreas, año inicial y nivel Área o Pozo. La opción predeterminada **Nueva hoja** crea `CapIV_Datos` desde A1 sin seleccionar ninguna celda. **Celda actual** queda como alternativa para una ubicación personalizada. Para incorporar el último mes disponible, abrir el mismo Excel y pulsar **Actualizar datos**.
 
-El flujo **Pronósticos** es opcional e independiente.
+El flujo **Pronósticos** es opcional e independiente. Genera un pronóstico separado por cada área o concesión seleccionada; `Resumen_Areas` sólo las reúne para comparar.
 
 La guía completa está en `output/pdf/CapIV_Tutorial_Lanzamiento.pdf`.

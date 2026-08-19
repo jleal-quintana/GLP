@@ -34,6 +34,22 @@ export async function captureSelectedCell(granularity: DataOutputTarget['granula
   });
 }
 
+export async function createNewDataSheetTarget(granularity: DataOutputTarget['granularity']): Promise<DataOutputTarget> {
+  return Excel.run(async (context) => {
+    const sheets = context.workbook.worksheets;
+    sheets.load('items/name');
+    await context.sync();
+    const sheetName = nextAvailableDataSheetName(sheets.items.map((sheet) => sheet.name));
+    return {
+      sheetName,
+      startAddress: 'A1',
+      granularity,
+      tableName: createTableName(sheetName, 'A1'),
+      createSheet: true,
+    };
+  });
+}
+
 export async function writeDatabaseTable(
   target: DataOutputTarget,
   downloads: DownloadedArea[],
@@ -93,6 +109,8 @@ export async function writeDatabaseTable(
     header.format.font.bold = true;
     output.format.autofitColumns();
     output.format.autofitRows();
+    sheet.activate();
+    start.select();
     await context.sync();
   });
 
@@ -104,7 +122,14 @@ export async function writeDatabaseTable(
 
 async function inspectDestination(target: DataOutputTarget, rowCount: number, columnCount: number) {
   return Excel.run(async (context) => {
-    const sheet = context.workbook.worksheets.getItem(target.sheetName);
+    const sheets = context.workbook.worksheets;
+    let sheet = sheets.getItemOrNullObject(target.sheetName);
+    sheet.load('isNullObject');
+    await context.sync();
+    if (sheet.isNullObject) {
+      if (!target.createSheet) throw new Error(`La hoja ${target.sheetName} ya no existe. Elegí otro destino.`);
+      sheet = sheets.add(target.sheetName);
+    }
     const start = sheet.getRange(target.startAddress);
     start.load(['rowIndex', 'columnIndex']);
     const tables = sheet.tables;
@@ -202,6 +227,15 @@ export function rangesOverlap(
     columnIndex + columnCount <= other.columnIndex ||
     other.columnIndex + other.columnCount <= columnIndex
   );
+}
+
+export function nextAvailableDataSheetName(existingNames: string[]): string {
+  const occupied = new Set(existingNames.map((name) => name.toLocaleLowerCase('es-AR')));
+  const base = 'CapIV_Datos';
+  if (!occupied.has(base.toLocaleLowerCase('es-AR'))) return base;
+  let suffix = 2;
+  while (occupied.has(`${base}_${suffix}`.toLocaleLowerCase('es-AR'))) suffix++;
+  return `${base}_${suffix}`;
 }
 
 function excelColumn(index: number): string {

@@ -83,6 +83,9 @@ button:disabled { cursor: default; opacity: 0.52; }
 .forecast-output-note { display: grid; gap: 3px; margin-bottom: 10px; padding: 10px; border: 1px solid #b8c9d5; border-radius: 9px; background: #f1f6f9; }
 .forecast-output-note strong { color: var(--marine); font-size: 10px; }
 .forecast-output-note span { color: var(--muted); font-size: 8.8px; line-height: 1.4; }
+.forecast-scope-note { display: grid; gap: 3px; margin-bottom: 10px; padding: 10px; border: 1px solid #c7d3bd; border-radius: 9px; background: #f4f8ed; }
+.forecast-scope-note strong { color: var(--forest); font-size: 9.8px; }
+.forecast-scope-note span { color: var(--muted); font-size: 8.7px; line-height: 1.4; }
 
 .area-list { display: grid; gap: 6px; max-height: 236px; overflow: auto; padding: 1px 2px 1px 0; scrollbar-width: thin; }
 .area-item { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: center; min-height: 48px; padding: 8px; border-color: var(--border); text-align: left; }
@@ -121,6 +124,15 @@ button:disabled { cursor: default; opacity: 0.52; }
 .destination-card strong { color: var(--forest); font-size: 10px; }
 .destination-card span { margin-top: 4px; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .destination-card button { border-color: var(--olive); color: var(--forest); background: white; font-size: 9px; }
+.destination-selector { margin-top: 11px; }
+.destination-selector button { display: block; min-height: 53px; text-align: left; }
+.destination-selector strong, .destination-selector small { display: block; }
+.destination-selector strong { font-size: 9.5px; }
+.destination-selector small { margin-top: 3px; color: var(--muted); font-size: 8px; font-weight: 500; }
+.destination-selector button.active small { color: rgb(255 255 255 / 0.75); }
+.automatic-destination { display: grid; gap: 4px; margin-top: 8px; padding: 10px; border: 1px solid #c7d3bd; border-radius: 9px; background: #f4f8ed; }
+.automatic-destination strong { color: var(--forest); font-size: 9.5px; }
+.automatic-destination span { color: var(--muted); font-size: 8.7px; line-height: 1.4; }
 .selected-areas { display: grid; gap: 8px; max-height: 330px; overflow: auto; margin-top: 10px; padding-right: 2px; }
 .data-selection { max-height: 245px; }
 .selected-card { padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: #fcfdfb; }

@@ -114,6 +114,7 @@ export interface DataOutputTarget {
   startAddress: string;
   granularity: DataGranularity;
   tableName: string;
+  createSheet?: boolean;
 }
 
 export interface OverwriteWarning {

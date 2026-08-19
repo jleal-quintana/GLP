@@ -136,7 +136,7 @@ def cover(c):
     text(c, "Instalación en Excel, configuración y uso", MARGIN, PAGE_H - 316, 15, WHITE, "Inter-Bold")
     text(
         c,
-        "Una guía breve para instalar CapIV, descargar una base en cualquier celda y, opcionalmente, generar pronósticos.",
+        "Una guía breve para instalar CapIV, descargar una base en una hoja nueva y, opcionalmente, generar pronósticos.",
         MARGIN,
         PAGE_H - 350,
         11,
@@ -178,25 +178,25 @@ def configure_page(c):
     rounded(c, MARGIN, 430, PAGE_W - 2 * MARGIN, 190, WHITE, radius=14, stroke=PALE_BLUE)
     number_circle(c, 1, MARGIN + 28, 588, GREEN)
     text(c, "DATOS", MARGIN + 51, 592, 9, GREEN, "Inter-Bold")
-    text(c, "Crear una tabla en la celda elegida", MARGIN + 18, 552, 14, DARK_GREEN, "Inter-Bold")
+    text(c, "Crear una tabla sin elegir celdas", MARGIN + 18, 552, 14, DARK_GREEN, "Inter-Bold")
     bullet(c, "Elegí áreas y año inicial.", MARGIN + 18, 518, 455)
     bullet(c, "Seleccioná nivel Área (totales mensuales) o Pozo (detalle pozo-mes).", MARGIN + 18, 490, 455)
-    bullet(c, "Marcá una celda en Excel y pulsá Usar celda seleccionada.", MARGIN + 18, 458, 455)
+    bullet(c, "Dejá Nueva hoja y pulsá Crear tabla: CapIV crea CapIV_Datos desde A1.", MARGIN + 18, 458, 455)
     rounded(c, MARGIN, 205, PAGE_W - 2 * MARGIN, 190, WHITE, radius=14, stroke=PALE_BLUE)
     number_circle(c, 2, MARGIN + 28, 363, BLUE)
     text(c, "PRONÓSTICOS · OPCIONAL", MARGIN + 51, 367, 9, BLUE, "Inter-Bold")
     text(c, "Modelar con los datos guardados", MARGIN + 18, 327, 14, DARK_GREEN, "Inter-Bold")
-    bullet(c, "Abrí Pronósticos y leé los datos del mismo libro.", MARGIN + 18, 293, 455, dot=BLUE)
+    bullet(c, "Cada área o concesión genera un pronóstico independiente.", MARGIN + 18, 293, 455, dot=BLUE)
     bullet(c, "Definí horizonte y métodos para las áreas deseadas.", MARGIN + 18, 265, 455, dot=BLUE)
     bullet(c, "Generá Prono, Pozos, gráficos técnicos separados y Resumen sin volver a descargar.", MARGIN + 18, 233, 455, dot=BLUE)
     rounded(c, MARGIN, 105, PAGE_W - 2 * MARGIN, 72, LIME, radius=12)
     text(c, "Protección de datos", MARGIN + 16, 151, 9, DARK_GREEN, "Inter-Bold")
-    text(c, "Si la tabla ocupará celdas con contenido, CapIV muestra el rango y exige confirmar antes de sobrescribir.", MARGIN + 16, 128, 9.4, DARK_GREEN, max_width=460, leading=13)
+    text(c, "Para una ubicación personalizada, elegí Celda actual. Si hay contenido, CapIV muestra el rango y exige confirmar.", MARGIN + 16, 128, 9.4, DARK_GREEN, max_width=460, leading=13)
 
 
 def generate_page(c):
     page_header(c, "Actualización", 4)
-    title(c, "Mes a mes", "Actualizar la tabla existente", "CapIV recuerda las áreas, el nivel y la celda usados anteriormente.")
+    title(c, "Mes a mes", "Actualizar la tabla existente", "CapIV recuerda las áreas, el nivel y la hoja usados anteriormente.")
     rounded(c, MARGIN, 520, PAGE_W - 2 * MARGIN, 112, LIME, radius=14)
     text(c, "ACTUALIZAR DATOS", MARGIN + 17, 606, 8, DARK_GREEN, "Inter-Bold")
     text(c, "Traé automáticamente los meses nuevos", MARGIN + 17, 579, 14, DARK_GREEN, "Inter-Bold")
@@ -217,14 +217,14 @@ def generate_page(c):
     rounded(c, MARGIN, 120, PAGE_W - 2 * MARGIN, 63, PALE_BLUE, radius=10)
     text(c, "Los pronósticos son independientes", MARGIN + 15, 158, 9.1, BLUE, "Inter-Bold")
     text(c, "Actualizar Datos no modifica hojas Prono, Pozos, Gráficos ni Resumen. Actualizalas desde su propio flujo cuando quieras.", MARGIN + 15, 137, 9, BLUE, max_width=465, leading=12.5)
-    text(c, "Si el libro no tiene una tabla creada por CapIV, elegí áreas, nivel y una celda de destino.", MARGIN, 88, 8.8, MUTED)
+    text(c, "Si el libro no tiene una tabla creada por CapIV, elegí áreas y nivel; CapIV creará una hoja nueva.", MARGIN, 88, 8.8, MUTED)
 
 
 def outputs_page(c):
     page_header(c, "Resultados", 5)
     title(c, "Libro generado", "Qué crea cada flujo", "Datos genera una tabla plana. Pronósticos agrega hojas de modelo sólo si el usuario lo solicita.")
     rows = [
-        ("CapIV_Datos_*", "Tabla en la celda elegida: mensual por área o detalle por pozo."),
+        ("CapIV_Datos_*", "Tabla desde A1 en una hoja nueva: mensual por área o detalle por pozo."),
         ("{AREA}_Prono", "Pronóstico de producción y supuestos editables."),
         ("{AREA}_Pozos", "Actividad y proyección de pozos."),
         ("{AREA}_Graficos", "Producción, ratios, inyección, acumuladas y pozos en gráficos separados."),

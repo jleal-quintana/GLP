@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { appendDebug, createDebugEntry } from '../excel/debugSheet';
-import { captureSelectedCell } from '../excel/databaseSheet';
+import { captureSelectedCell, createNewDataSheetTarget } from '../excel/databaseSheet';
 import { buildForecastWorkbook, downloadWorkbookData } from '../excel/workbookBuilder';
 import { readSavedWorkbookPlans } from '../excel/workbookState';
 import type {
@@ -31,6 +31,7 @@ const OIL_METHODS: ForecastDefaults['oilMethod'][] = [...GROSS_METHODS, 'Rap Np'
 const GAS_METHODS: ForecastDefaults['gasMethod'][] = [...GROSS_METHODS, 'RGP'];
 
 type Workflow = 'data' | 'forecast';
+type DestinationMode = 'new-sheet' | 'selected-cell';
 type StatusTone = 'neutral' | 'success' | 'warning' | 'error';
 
 interface StatusMessage {
@@ -55,6 +56,7 @@ export function App() {
   const [defaults, setDefaults] = useState<ForecastDefaults>(DEFAULTS);
   const [startYearDraft, setStartYearDraft] = useState(String(DEFAULTS.startYear));
   const [granularity, setGranularity] = useState<DataGranularity>('area');
+  const [destinationMode, setDestinationMode] = useState<DestinationMode>('new-sheet');
   const [dataOutput, setDataOutput] = useState<DataOutputTarget | null>(null);
   const [forecastMode, setForecastMode] = useState<'update' | 'regenerate'>('update');
   const [savedInfo, setSavedInfo] = useState<SavedInfo | null>(null);
@@ -191,6 +193,7 @@ export function App() {
     try {
       const target = await captureSelectedCell(granularity);
       setDataOutput(target);
+      setDestinationMode('selected-cell');
       setStatus({ tone: 'success', text: `Destino elegido: ${target.sheetName}!${target.startAddress}` });
     } catch (error) {
       await showError('Celda de destino', error);
@@ -211,7 +214,7 @@ export function App() {
       setStatus({ tone: 'warning', text: 'Seleccioná al menos un área para descargar.' });
       return;
     }
-    if (!dataOutput) {
+    if (destinationMode === 'selected-cell' && !dataOutput) {
       setStatus({ tone: 'warning', text: 'Seleccioná en Excel la celda donde querés crear la tabla.' });
       return;
     }
@@ -220,11 +223,15 @@ export function App() {
     setProgress({ completed: 0, total: 1, percent: 0, message: 'Preparando descarga' });
     setStatus({ tone: 'neutral', text: 'Preparando descarga…' });
     try {
+      const output = destinationMode === 'new-sheet'
+        ? await createNewDataSheetTarget(granularity)
+        : dataOutput!;
       const plans = dataPlans(dataSelected, 'update');
-      await downloadWorkbookData(plans, dataOutput, reportProgress, requestMissingMonths, requestOverwrite);
+      await downloadWorkbookData(plans, output, reportProgress, requestMissingMonths, requestOverwrite);
+      setDataOutput(output);
       setForecastSelected(dataSelected);
       setSavedInfo({ areaCount: plans.length, dataSavedAt: new Date().toISOString() });
-      setStatus({ tone: 'success', text: `Tabla ${granularity === 'area' ? 'mensual por área' : 'pozo-mes'} generada en ${dataOutput.sheetName}!${dataOutput.startAddress}.` });
+      setStatus({ tone: 'success', text: `Tabla ${granularity === 'area' ? 'mensual por área' : 'pozo-mes'} generada en ${output.sheetName}!${output.startAddress}.` });
     } catch (error) {
       await showError('Descarga', error);
     } finally {
@@ -406,11 +413,21 @@ export function App() {
                   })}
                 </div>
               )}
-              <div className="destination-card">
-                <div><strong>Celda de destino</strong><span>{dataOutput ? `${dataOutput.sheetName}!${dataOutput.startAddress}` : 'Seleccioná una celda vacía en Excel'}</span></div>
-                <button type="button" onClick={() => void chooseDestination()} disabled={busy}>{dataOutput ? 'Cambiar celda' : 'Usar celda seleccionada'}</button>
+              <div className="segmented destination-selector" role="group" aria-label="Destino de la tabla">
+                <button type="button" className={destinationMode === 'new-sheet' ? 'active' : ''} onClick={() => setDestinationMode('new-sheet')} aria-pressed={destinationMode === 'new-sheet'}><strong>Nueva hoja</strong><small>Automático · recomendado</small></button>
+                <button type="button" className={destinationMode === 'selected-cell' ? 'active' : ''} onClick={() => setDestinationMode('selected-cell')} aria-pressed={destinationMode === 'selected-cell'}><strong>Celda actual</strong><small>Ubicación personalizada</small></button>
               </div>
-              <p className="helper-text">Si la tabla ocupará celdas con datos, el add-in mostrará el rango y pedirá confirmación antes de escribir.</p>
+              {destinationMode === 'new-sheet' ? (
+                <div className="automatic-destination"><strong>CapIV crea la hoja por vos</strong><span>La base comenzará en A1, en CapIV_Datos o el siguiente nombre libre.</span></div>
+              ) : (
+                <>
+                  <div className="destination-card">
+                    <div><strong>Celda de destino</strong><span>{dataOutput ? `${dataOutput.sheetName}!${dataOutput.startAddress}` : 'Seleccioná una celda vacía en Excel'}</span></div>
+                    <button type="button" onClick={() => void chooseDestination()} disabled={busy}>{dataOutput ? 'Cambiar celda' : 'Usar celda seleccionada'}</button>
+                  </div>
+                  <p className="helper-text">Si el rango contiene datos, CapIV pedirá confirmación antes de sobrescribir.</p>
+                </>
+              )}
             </section>
           </>
         ) : (
@@ -426,6 +443,10 @@ export function App() {
 
             <section className="panel">
               <SectionHeading step="1" title="Definí el pronóstico" description="No se realiza ninguna descarga" />
+              <div className="forecast-scope-note">
+                <strong>1 pronóstico por cada área / concesión</strong>
+                <span>CapIV calcula cada selección por separado; sólo las reúne en Resumen_Areas.</span>
+              </div>
               <div className="field-grid two-columns">
                 <label>Horizonte (años)<input type="number" min="1" max="40" value={defaults.horizonYears} onChange={(event) => setDefaults({ ...defaults, horizonYears: boundedNumber(event.target.value, 1, 40, defaults.horizonYears) })} /></label>
                 <label>Datos<input value={savedInfo ? `${savedInfo.areaCount} áreas` : 'Sin cargar'} disabled /></label>
@@ -487,7 +508,7 @@ export function App() {
         )}
         <p className={`status-message ${status.tone}`} role={status.tone === 'error' ? 'alert' : 'status'}><span />{status.text}</p>
         {workflow === 'data' ? (
-          <button type="button" className="primary" disabled={busy || dataSelected.length === 0 || !dataOutput || !startYearsValid} onClick={runDataDownload}>{buildBusy ? 'Descargando…' : `Crear tabla ${dataSelected.length ? `(${dataSelected.length} áreas)` : ''}`}</button>
+          <button type="button" className="primary" disabled={busy || dataSelected.length === 0 || (destinationMode === 'selected-cell' && !dataOutput) || !startYearsValid} onClick={runDataDownload}>{buildBusy ? 'Descargando…' : `Crear tabla ${dataSelected.length ? `(${dataSelected.length} áreas)` : ''}`}</button>
         ) : (
           <button type="button" className="primary forecast-action" disabled={busy || forecastSelected.length === 0} onClick={runForecast}>{buildBusy ? 'Generando…' : `Generar pronósticos ${forecastSelected.length ? `(${forecastSelected.length})` : ''}`}</button>
         )}

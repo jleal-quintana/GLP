@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDatabaseMatrix, rangesOverlap, type DownloadedArea } from '../src/excel/databaseSheet';
+import { buildDatabaseMatrix, nextAvailableDataSheetName, rangesOverlap, type DownloadedArea } from '../src/excel/databaseSheet';
 
 const download: DownloadedArea = {
   plan: {
@@ -49,5 +49,10 @@ describe('base de datos de salida', () => {
     const other = { rowIndex: 5, columnIndex: 5, rowCount: 3, columnCount: 3 };
     expect(rangesOverlap(4, 4, 3, 3, other)).toBe(true);
     expect(rangesOverlap(0, 0, 2, 2, other)).toBe(false);
+  });
+
+  it('elige un nombre de hoja nuevo sin pisar hojas existentes', () => {
+    expect(nextAvailableDataSheetName(['Sheet1'])).toBe('CapIV_Datos');
+    expect(nextAvailableDataSheetName(['capiv_datos', 'CapIV_Datos_2'])).toBe('CapIV_Datos_3');
   });
 });

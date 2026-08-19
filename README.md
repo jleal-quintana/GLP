@@ -37,9 +37,11 @@ npx office-addin-dev-certs install
 
 ### Actualizar un libro existente
 
-El flujo **Datos** crea una única tabla plana en la celda elegida por el usuario. Puede salir agregada por área y mes o detallada por pozo-mes. Antes de escribir sobre contenido existente, CapIV muestra el rango afectado y exige confirmación.
+El flujo **Datos** crea una única tabla plana. Por defecto, CapIV genera una hoja nueva (`CapIV_Datos`, `CapIV_Datos_2`, etc.) y comienza en A1; opcionalmente, el usuario puede elegir **Celda actual** para insertarla en una ubicación personalizada. Puede salir agregada por área y mes o detallada por pozo-mes. Antes de escribir sobre contenido existente, CapIV muestra el rango afectado y exige confirmación.
 
-Al abrir un archivo generado anteriormente, usar **Actualizar datos**. CapIV recupera áreas, nivel y celda desde `_CapIV_State`, vuelve a consultar la serie oficial completa e incorpora el último mes o correcciones sin duplicar registros. El flujo **Pronósticos** es opcional e independiente.
+Al abrir un archivo generado anteriormente, usar **Actualizar datos**. CapIV recupera áreas, nivel y hoja de destino desde `_CapIV_State`, vuelve a consultar la serie oficial completa e incorpora el último mes o correcciones sin duplicar registros. El flujo **Pronósticos** es opcional e independiente.
+
+Los pronósticos se calculan **por área/concesión**: si se seleccionan varias, CapIV genera un juego independiente de hojas para cada `cod_area`. `Resumen_Areas` las consolida visualmente, pero los cálculos no mezclan concesiones. La hoja de pozos proyecta actividad/cantidad de pozos del área; no genera una curva de producción individual por pozo.
 
 ## Salida en el libro
 
