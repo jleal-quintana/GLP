@@ -21,6 +21,15 @@ export async function fetchWithRetry(url: string, attempts = 4): Promise<Respons
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
+export function catalogProxyUrl(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return undefined;
+  const proxyBase = typeof CAPIV_PROXY_BASE_URL === 'string' ? CAPIV_PROXY_BASE_URL.trim() : '';
+  if (!proxyBase) return undefined;
+  return `${proxyBase}${proxyBase.includes('?') ? '&' : '?'}catalog=1`;
+}
+
 function proxiedUrl(url: string): string {
   if (typeof window === 'undefined') return url;
   const host = window.location.hostname;

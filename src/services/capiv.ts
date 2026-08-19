@@ -1,6 +1,6 @@
 import type { AreaCatalogItem, CapituloIvDownloadEventHandler, MonthlyAggregate, ProductionRecord } from '../models/types';
 import { parseCsv, parseCsvLine } from './csv';
-import { fetchWithRetry } from './http';
+import { catalogProxyUrl, fetchWithRetry } from './http';
 
 const API_ACTION_URL = 'https://datos.gob.ar/api/3/action';
 const DATASET_ID = 'produccion-de-petroleo-y-gas-por-pozo';
@@ -141,6 +141,14 @@ function numberValue(record: Record<string, string>, ...keys: string[]): number 
 }
 
 export async function fetchAreaCatalog(): Promise<AreaCatalogItem[]> {
+  const optimizedCatalogUrl = catalogProxyUrl();
+  if (optimizedCatalogUrl) {
+    const response = await fetchWithRetry(optimizedCatalogUrl);
+    if (!response.ok) throw new Error(`No se pudo consultar el catálogo optimizado (HTTP ${response.status}).`);
+    const catalog = await response.json();
+    if (!Array.isArray(catalog)) throw new Error('El catálogo optimizado devolvió una respuesta inválida.');
+    return catalog as AreaCatalogItem[];
+  }
   const resources = await loadResourceCatalog();
   const byArea = new Map<string, AreaCatalogItem>();
   await streamResourceCsv(resources.wells, (record) => {
