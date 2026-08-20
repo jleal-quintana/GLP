@@ -124,22 +124,35 @@ export function forecastChartCatalog(): ForecastChartCatalogItem[] {
   return DEFINITIONS.map(({ id, title, section }) => ({ id, title, section }));
 }
 
-export function writeForecastCharts(
+export async function writeForecastCharts(
   sheet: Excel.Worksheet,
   sourceSheetNames: ChartSources,
   totalMonths: number,
   historyMonths: number,
-): void {
+  context?: Excel.RequestContext,
+): Promise<void> {
   const sources: ChartSources = {
     prono: quoteSheetName(sourceSheetNames.prono),
     pozos: quoteSheetName(sourceSheetNames.pozos),
     hdp: quoteSheetName(sourceSheetNames.hdp),
+  };
+  // Con contexto, sincroniza tras cada bloque para que un fallo quede atribuido
+  // al gráfico exacto en la hoja Debug en vez de al paso "contenido" completo.
+  const checkpoint = async (label: string) => {
+    if (!context) return;
+    try {
+      await context.sync();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`${label}: ${detail}`);
+    }
   };
 
   writeSectionHeader(sheet, 'A4:P4', 'PRODUCCIÓN MENSUAL');
   writeSectionHeader(sheet, 'A46:P46', 'INDICADORES DE COMPORTAMIENTO');
   writeSectionHeader(sheet, 'A88:P88', 'ACUMULADAS Y ACTIVIDAD');
   writeSectionHeader(sheet, 'A110:P110', 'DIAGNÓSTICO DE SECUNDARIA');
+  await checkpoint('Encabezados de sección');
 
   let helperColumn = 25;
   for (const definition of DEFINITIONS) {
@@ -147,10 +160,12 @@ export function writeForecastCharts(
     const source = writeHelperTable(sheet, helperColumn, table, definition.id);
     addBrandedChart(sheet, source, definition);
     helperColumn += table.headers.length + 1;
+    await checkpoint(`Gráfico ${definition.id} (${definition.title})`);
   }
 
   sheet.getRangeByIndexes(0, 25, Math.max(totalMonths + 1, historyMonths + 1), helperColumn - 25).columnHidden = true;
   sheet.getRange('A:P').format.columnWidth = 11;
+  await checkpoint('Ocultar columnas auxiliares');
 }
 
 function phaseChart(
@@ -329,8 +344,10 @@ function addBrandedChart(sheet: Excel.Worksheet, source: Excel.Range, definition
 function writeSectionHeader(sheet: Excel.Worksheet, address: string, label: string): void {
   const range = sheet.getRange(address);
   range.unmerge();
+  // El valor va en la celda superior izquierda ANTES del merge: asignar un array 1×1
+  // a un rango mergeado de 1×16 dispara un error de dimensiones en Office.js.
+  range.getCell(0, 0).values = [[label]];
   range.merge();
-  range.values = [[label]];
   range.format.fill.color = brand.forest;
   range.format.font.color = '#FFFFFF';
   range.format.font.bold = true;

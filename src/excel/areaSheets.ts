@@ -83,8 +83,8 @@ export async function writeAreaForecastSheets(
     writePozosSheet(pozos, plan, monthly, middleMissingPolicy);
     if (preserved?.pozos) restorePozosSettings(pozos, preserved.pozos);
   });
-  await writeAreaSheet(plan.selection.areaId, 'Graficos', names.graficos, async (graficos) => {
-    writeChartsSheet(graficos, plan, monthly.length);
+  await writeAreaSheet(plan.selection.areaId, 'Graficos', names.graficos, async (graficos, context) => {
+    await writeChartsSheet(graficos, plan, monthly.length, context);
   });
 }
 
@@ -424,16 +424,17 @@ function writeDetailSheet(sheet: Excel.Worksheet, records: ProductionRecord[]): 
   sheet.freezePanes.freezeRows(4);
 }
 
-function writeChartsSheet(
+async function writeChartsSheet(
   sheet: Excel.Worksheet,
   plan: AreaWorkbookPlan,
   historyMonths: number,
-): void {
+  context?: Excel.RequestContext,
+): Promise<void> {
   const names = areaSheetNames(plan.selection.areaId);
   const forecastMonths = plan.defaults.horizonYears * 12;
   const totalMonths = Math.max(1, historyMonths + forecastMonths);
   writeTitle(sheet, `Gráficos técnicos - ${plan.selection.areaId}`, 'Histórico y pronóstico separados por variable');
-  writeForecastCharts(sheet, { prono: names.prono, pozos: names.pozos, hdp: names.hdp }, totalMonths, historyMonths);
+  await writeForecastCharts(sheet, { prono: names.prono, pozos: names.pozos, hdp: names.hdp }, totalMonths, historyMonths, context);
 }
 
 function maybeBlank(month: MonthlyAggregate, value: number, middleMissingPolicy: 'blank' | 'zero'): string | number {
