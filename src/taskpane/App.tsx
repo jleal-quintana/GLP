@@ -326,7 +326,8 @@ export function App() {
     ]));
     setAssetNameDraft('');
     setAssetFormOpen(false);
-    setStatus({ tone: 'success', text: `Activo ${name} creado con ${areaIds.length} ${areaIds.length === 1 ? 'concesión' : 'concesiones'}.` });
+    setSelectedParamAreaIds([]);
+    setStatus({ tone: 'success', text: `Activo ${name} creado con ${areaIds.length} ${areaIds.length === 1 ? 'concesión' : 'concesiones'}. Selección limpia para el próximo activo.` });
   }
 
   function removeSelectionFromAssets() {
