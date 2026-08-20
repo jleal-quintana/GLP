@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyBulkOverride, createAssetId, normalizeAssetGroups } from '../src/domain/assets';
+import { createAssetId, normalizeAssetGroups } from '../src/domain/assets';
 import { assetSheetName } from '../src/excel/names';
 
 describe('activos', () => {
@@ -19,15 +19,5 @@ describe('activos', () => {
       { id: 'mza', name: 'Mendoza', areaIds: ['A', 'B'] },
       { id: 'otro', name: 'Otro', areaIds: ['C'] },
     ]);
-  });
-
-  it('aplica un cambio masivo sin borrar ajustes previos', () => {
-    const output = applyBulkOverride(
-      { A: { areaId: 'A', gasMethod: 'RGP' } },
-      ['A', 'B'],
-      { oilMethod: 'Declinaci\u00f3n Exp.', oilDi: 0.18 },
-    );
-    expect(output.A).toMatchObject({ gasMethod: 'RGP', oilMethod: 'Declinaci\u00f3n Exp.', oilDi: 0.18 });
-    expect(output.B).toEqual({ areaId: 'B', oilMethod: 'Declinaci\u00f3n Exp.', oilDi: 0.18 });
   });
 });

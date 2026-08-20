@@ -1,6 +1,30 @@
-import type { AreaWorkbookPlan, ForecastDefaults, ForecastMethod, MonthlyAggregate } from '../models/types';
+import type { AreaForecastOverride, AreaForecastParams, AreaWorkbookPlan, ForecastDefaults, ForecastMethod, MonthlyAggregate } from '../models/types';
 
 type MonthlyValueKey = 'oil' | 'gas' | 'water' | 'gross' | 'oilWells' | 'gasWells' | 'injectorWells';
+
+export const DEFAULT_DECLINE = {
+  grossDi: 0.12,
+  grossB: 0.7,
+  oilDi: 0.12,
+  oilB: 0.7,
+  gasDi: 0.12,
+  gasB: 0.7,
+} as const;
+
+export function resolveAreaParams(defaults: ForecastDefaults, override?: AreaForecastOverride): AreaForecastParams {
+  return {
+    grossMethod: override?.grossMethod ?? defaults.grossMethod,
+    oilMethod: override?.oilMethod ?? defaults.oilMethod,
+    gasMethod: override?.gasMethod ?? defaults.gasMethod,
+    takeInitialFromHistory: override?.takeInitialFromHistory ?? defaults.takeInitialFromHistory,
+    grossDi: override?.grossDi ?? DEFAULT_DECLINE.grossDi,
+    grossB: override?.grossB ?? DEFAULT_DECLINE.grossB,
+    oilDi: override?.oilDi ?? DEFAULT_DECLINE.oilDi,
+    oilB: override?.oilB ?? DEFAULT_DECLINE.oilB,
+    gasDi: override?.gasDi ?? DEFAULT_DECLINE.gasDi,
+    gasB: override?.gasB ?? DEFAULT_DECLINE.gasB,
+  };
+}
 
 export function resolveForecastMethods(plan: AreaWorkbookPlan): Pick<ForecastDefaults, 'grossMethod' | 'oilMethod' | 'gasMethod'> {
   return {

@@ -1,4 +1,4 @@
-import type { AreaForecastOverride, AssetGroup } from '../models/types';
+import type { AssetGroup } from '../models/types';
 
 export function createAssetId(name: string, existing: AssetGroup[]): string {
   const base = name
@@ -32,14 +32,4 @@ export function normalizeAssetGroups(groups: AssetGroup[], availableAreaIds?: It
     output.push({ id: group.id, name, areaIds });
   }
   return output;
-}
-
-export function applyBulkOverride(
-  current: Record<string, AreaForecastOverride>,
-  areaIds: string[],
-  patch: Partial<Omit<AreaForecastOverride, 'areaId' | 'startYear'>>,
-): Record<string, AreaForecastOverride> {
-  const next = { ...current };
-  for (const areaId of areaIds) next[areaId] = { ...next[areaId], ...patch, areaId };
-  return next;
 }

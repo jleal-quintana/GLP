@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateForecast, forecastFormula, lastNonMissing, nextMonth } from '../src/domain/forecast';
-import type { MonthlyAggregate } from '../src/models/types';
+import { DEFAULT_DECLINE, evaluateForecast, forecastFormula, lastNonMissing, nextMonth, resolveAreaParams } from '../src/domain/forecast';
+import type { ForecastDefaults, MonthlyAggregate } from '../src/models/types';
 
 function month(date: string, oil: number, missing = false): MonthlyAggregate {
   const [year, monthNumber] = date.split('-').map(Number);
@@ -46,5 +46,39 @@ describe('forecast projection', () => {
     expect(forecastFormula('B5', 'IF($B$7="Sí",100,$H$5)', 'E6', 'E7', 1)).toContain(
       'IF($B$7="Sí",100,$H$5)',
     );
+  });
+
+  it('resolves complete area params from defaults and partial overrides', () => {
+    const defaults: ForecastDefaults = {
+      startYear: 2015,
+      horizonYears: 10,
+      grossMethod: 'Constante',
+      oilMethod: 'Declinación Exp.',
+      gasMethod: 'RGP',
+      takeInitialFromHistory: true,
+    };
+
+    expect(resolveAreaParams(defaults)).toEqual({
+      grossMethod: 'Constante',
+      oilMethod: 'Declinación Exp.',
+      gasMethod: 'RGP',
+      takeInitialFromHistory: true,
+      ...DEFAULT_DECLINE,
+    });
+
+    expect(resolveAreaParams(defaults, {
+      areaId: 'A',
+      oilMethod: 'Declinación Hip.',
+      oilDi: 0.2,
+      oilB: 1.1,
+      takeInitialFromHistory: false,
+    })).toMatchObject({
+      grossMethod: 'Constante',
+      oilMethod: 'Declinación Hip.',
+      oilDi: 0.2,
+      oilB: 1.1,
+      takeInitialFromHistory: false,
+      gasDi: DEFAULT_DECLINE.gasDi,
+    });
   });
 });

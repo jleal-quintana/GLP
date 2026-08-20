@@ -1,6 +1,6 @@
 {
   "name": "cap-iv-addin",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "private": true,
   "description": "Excel add-in for Capitulo IV production history, forecasts, and charts.",
   "scripts": {

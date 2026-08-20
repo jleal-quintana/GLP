@@ -44,6 +44,8 @@ export interface AreaForecastOverride {
 
 export type AreaForecastOverrideField = keyof Omit<AreaForecastOverride, 'areaId' | 'startYear'>;
 
+export type AreaForecastParams = Required<Omit<AreaForecastOverride, 'areaId' | 'startYear'>>;
+
 export interface AssetGroup {
   id: string;
   name: string;
