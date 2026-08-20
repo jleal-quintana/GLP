@@ -19,7 +19,7 @@ import type {
   MissingMonthsDecision,
   OverwriteWarning,
 } from '../models/types';
-import { fetchAreaCatalog } from '../services/capiv';
+import { fetchAreaCatalog, type CatalogLoadProgress } from '../services/capiv';
 
 const DEFAULTS: ForecastDefaults = {
   startYear: 2015,
@@ -90,7 +90,8 @@ export function App() {
   const [assetGroups, setAssetGroups] = useState<AssetGroup[]>([]);
   const [assetNameDraft, setAssetNameDraft] = useState('');
   const [assetAreaDraft, setAssetAreaDraft] = useState<string[]>([]);
-  const [bulkScope, setBulkScope] = useState('all');
+  const [bulkSelectedAreaIds, setBulkSelectedAreaIds] = useState<string[]>([]);
+  const [bulkQuery, setBulkQuery] = useState('');
   const [bulkDraft, setBulkDraft] = useState<BulkForecastDraft>(EMPTY_BULK_DRAFT);
   const [defaults, setDefaults] = useState<ForecastDefaults>(DEFAULTS);
   const [startYearDraft, setStartYearDraft] = useState(String(DEFAULTS.startYear));
@@ -100,6 +101,8 @@ export function App() {
   const [forecastMode, setForecastMode] = useState<'update' | 'regenerate'>('update');
   const [savedInfo, setSavedInfo] = useState<SavedInfo | null>(null);
   const [catalogBusy, setCatalogBusy] = useState(false);
+  const [catalogProgress, setCatalogProgress] = useState<CatalogLoadProgress | null>(null);
+  const [catalogElapsed, setCatalogElapsed] = useState(0);
   const [buildBusy, setBuildBusy] = useState(false);
   const [status, setStatus] = useState<StatusMessage>({ tone: 'neutral', text: 'Conectando con Capítulo IV…' });
   const [progress, setProgress] = useState<BuildProgress | null>(null);
@@ -128,6 +131,21 @@ export function App() {
   const visibleAreas = useMemo(() => matchingAreas.slice(0, 100), [matchingAreas]);
   const assignedAssetByArea = useMemo(() => new Map(assetGroups.flatMap((group) => group.areaIds.map((areaId) => [areaId, group] as const))), [assetGroups]);
   const unassignedForecastAreas = useMemo(() => forecastSelected.filter((area) => !assignedAssetByArea.has(area.areaId)), [forecastSelected, assignedAssetByArea]);
+  const bulkAreaGroups = useMemo(() => {
+    const needle = bulkQuery.trim().toLocaleUpperCase('es-AR');
+    const matches = (area: AreaSelection, groupName: string) => !needle
+      || `${area.areaId} ${area.areaName} ${area.province} ${area.companies.join(' ')} ${groupName}`.toLocaleUpperCase('es-AR').includes(needle);
+    const grouped = assetGroups.map((group) => ({
+      id: group.id,
+      name: group.name,
+      areas: forecastSelected.filter((area) => group.areaIds.includes(area.areaId) && matches(area, group.name)),
+    })).filter((group) => group.areas.length > 0);
+    const unassigned = forecastSelected.filter((area) => !assignedAssetByArea.has(area.areaId) && matches(area, 'Sin activo'));
+    if (unassigned.length > 0) grouped.push({ id: 'unassigned', name: 'Sin activo', areas: unassigned });
+    return grouped;
+  }, [assetGroups, assignedAssetByArea, bulkQuery, forecastSelected]);
+  const bulkVisibleAreaIds = useMemo(() => bulkAreaGroups.flatMap((group) => group.areas.map((area) => area.areaId)), [bulkAreaGroups]);
+  const bulkSelectedAssetCount = useMemo(() => assetGroups.filter((group) => group.areaIds.some((areaId) => bulkSelectedAreaIds.includes(areaId))).length, [assetGroups, bulkSelectedAreaIds]);
 
   useEffect(() => {
     void refreshCatalog();
@@ -137,12 +155,29 @@ export function App() {
     setStartYearDraft(String(defaults.startYear));
   }, [defaults.startYear]);
 
+  useEffect(() => {
+    if (!catalogBusy) return undefined;
+    const startedAt = Date.now();
+    setCatalogElapsed(0);
+    const timer = window.setInterval(() => setCatalogElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+    return () => window.clearInterval(timer);
+  }, [catalogBusy]);
+
+  useEffect(() => {
+    const availableIds = new Set(forecastSelected.map((area) => area.areaId));
+    setBulkSelectedAreaIds((current) => current.filter((areaId) => availableIds.has(areaId)));
+  }, [forecastSelected]);
+
   async function refreshCatalog() {
     setCatalogBusy(true);
+    setCatalogProgress({ step: 1, message: 'Iniciando conexión con CapIV' });
     setStatus({ tone: 'neutral', text: 'Actualizando catálogo oficial…' });
     try {
       await logDebugSafely('Catálogo', 'info', 'Inicio de descarga del catálogo');
-      const items = await fetchAreaCatalog();
+      const items = await fetchAreaCatalog((progress) => {
+        setCatalogProgress(progress);
+        setStatus({ tone: 'neutral', text: progress.message });
+      });
       setCatalog(items);
       setStatus({ tone: 'success', text: `${items.length} áreas disponibles` });
       await logDebugSafely('Catálogo', 'ok', `${items.length} áreas disponibles`);
@@ -150,6 +185,7 @@ export function App() {
       await showError('Catálogo', error);
     } finally {
       setCatalogBusy(false);
+      setCatalogProgress(null);
     }
   }
 
@@ -248,13 +284,12 @@ export function App() {
     setAssetGroups((current) => [...current, group]);
     setAssetNameDraft('');
     setAssetAreaDraft([]);
-    setBulkScope(`asset:${group.id}`);
+    setBulkSelectedAreaIds(areaIds);
     setStatus({ tone: 'success', text: `Activo ${name} creado con ${areaIds.length} ${areaIds.length === 1 ? 'concesión' : 'concesiones'}.` });
   }
 
   function removeAssetGroup(groupId: string) {
     setAssetGroups((current) => current.filter((group) => group.id !== groupId));
-    if (bulkScope === `asset:${groupId}`) setBulkScope('all');
   }
 
   function removeAreaFromAsset(groupId: string, areaId: string) {
@@ -274,17 +309,20 @@ export function App() {
       : [...new Set([...current, ...ids])]);
   }
 
-  function bulkScopeAreaIds(): string[] {
-    if (bulkScope === 'all') return forecastSelected.map((area) => area.areaId);
-    if (bulkScope.startsWith('asset:')) return assetGroups.find((group) => `asset:${group.id}` === bulkScope)?.areaIds ?? [];
-    if (bulkScope.startsWith('area:')) return [bulkScope.slice(5)];
-    return [];
+  function toggleBulkArea(areaId: string) {
+    setBulkSelectedAreaIds((current) => current.includes(areaId) ? current.filter((item) => item !== areaId) : [...current, areaId]);
+  }
+
+  function toggleBulkGroup(areaIds: string[]) {
+    setBulkSelectedAreaIds((current) => areaIds.every((areaId) => current.includes(areaId))
+      ? current.filter((areaId) => !areaIds.includes(areaId))
+      : [...new Set([...current, ...areaIds])]);
   }
 
   function applyBulkForecastSettings() {
-    const areaIds = bulkScopeAreaIds().filter((areaId) => forecastSelected.some((area) => area.areaId === areaId));
+    const areaIds = bulkSelectedAreaIds.filter((areaId) => forecastSelected.some((area) => area.areaId === areaId));
     if (areaIds.length === 0) {
-      setStatus({ tone: 'warning', text: 'El alcance elegido no tiene concesiones para pronosticar.' });
+      setStatus({ tone: 'warning', text: 'Marcá al menos una concesión para aplicar el cambio.' });
       return;
     }
     const patch: Partial<Omit<AreaForecastOverride, 'areaId' | 'startYear'>> = {};
@@ -493,7 +531,7 @@ export function App() {
       <header className="topbar">
         <img src="assets/branding/logo_isotipo.png" alt="Quintana Energy" />
         <div className="brand-copy">
-          <div className="product-line"><h1>CapIV</h1><span>v0.5</span></div>
+          <div className="product-line"><h1>CapIV</h1><span>v0.5.1</span></div>
           <p>Capítulo IV · Datos y pronósticos</p>
         </div>
         <span className={catalog.length ? 'connection-dot online' : 'connection-dot'} title={catalog.length ? 'Catálogo conectado' : 'Conectando'} />
@@ -524,8 +562,23 @@ export function App() {
               <SectionHeading step="1" title="Elegí las áreas" description="Fuente oficial de Capítulo IV" />
               <button className="catalog-button" type="button" onClick={refreshCatalog} disabled={busy}>
                 <span>{catalogBusy ? 'Actualizando…' : 'Actualizar catálogo'}</span>
-                <small>{catalog.length ? `${catalog.length} áreas` : 'Sin datos locales'}</small>
+                <small>{catalogBusy ? `${catalogElapsed} s` : catalog.length ? `${catalog.length} áreas` : 'Sin datos locales'}</small>
               </button>
+              {catalogBusy && (
+                <div className="catalog-progress" role="status" aria-live="polite">
+                  <div className="catalog-progress-copy">
+                    <span className="catalog-pulse" aria-hidden="true" />
+                    <div><strong>{catalogProgress?.message ?? 'Actualizando catálogo oficial'}</strong><small>Seguimos trabajando · {catalogElapsed} s transcurridos</small></div>
+                  </div>
+                  <div className="catalog-progress-track" aria-hidden="true"><span /></div>
+                  <div className="catalog-progress-steps" aria-hidden="true">
+                    {['Conectar', 'Recibir', 'Preparar'].map((label, index) => {
+                      const step = index + 1;
+                      return <span key={label} className={step < (catalogProgress?.step ?? 1) ? 'done' : step === (catalogProgress?.step ?? 1) ? 'active' : ''}>{step < (catalogProgress?.step ?? 1) ? '✓' : step} {label}</span>;
+                    })}
+                  </div>
+                </div>
+              )}
               <div className="field-grid">
                 <label>Provincia<select value={province} onChange={(event) => setProvince(event.target.value)} disabled={!catalog.length || busy}>{provinces.map((item) => <option key={item}>{item}</option>)}</select></label>
                 <label>Buscar<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Área, código o empresa" disabled={!catalog.length || busy} /></label>
@@ -574,9 +627,7 @@ export function App() {
                 <button type="button" className={destinationMode === 'new-sheet' ? 'active' : ''} onClick={() => setDestinationMode('new-sheet')} aria-pressed={destinationMode === 'new-sheet'}><strong>Nueva hoja</strong><small>Automático · recomendado</small></button>
                 <button type="button" className={destinationMode === 'selected-cell' ? 'active' : ''} onClick={() => setDestinationMode('selected-cell')} aria-pressed={destinationMode === 'selected-cell'}><strong>Celda actual</strong><small>Ubicación personalizada</small></button>
               </div>
-              {destinationMode === 'new-sheet' ? (
-                <div className="automatic-destination"><strong>CapIV crea la hoja por vos</strong><span>La base comenzará en A1, en CapIV_Datos o el siguiente nombre libre.</span></div>
-              ) : (
+              {destinationMode === 'selected-cell' && (
                 <>
                   <div className="destination-card">
                     <div><strong>Celda de destino</strong><span>{dataOutput ? `${dataOutput.sheetName}!${dataOutput.startAddress}` : 'Seleccioná una celda vacía en Excel'}</span></div>
@@ -589,15 +640,6 @@ export function App() {
           </>
         ) : (
           <>
-            <section className="flow-source-card">
-              <div>
-                <span className="quick-update-kicker">Fuente: este Excel</span>
-                <h2>Usá los datos ya descargados</h2>
-                <p>{savedInfo ? `${savedInfo.areaCount} áreas disponibles · Datos ${formatSavedDate(savedInfo.dataSavedAt)}` : 'Primero leé el estado guardado dentro del libro.'}</p>
-              </div>
-              <button type="button" onClick={() => void loadWorkbookData()} disabled={busy}>Leer datos del libro</button>
-            </section>
-
             <section className="panel">
               <SectionHeading step="1" title="Definí el pronóstico" description="No se realiza ninguna descarga" />
               <div className="forecast-scope-note">
@@ -612,10 +654,6 @@ export function App() {
                 <MethodSelect label="Bruta" value={defaults.grossMethod} options={GROSS_METHODS} onChange={(value) => updateForecastDefault('grossMethod', value as ForecastDefaults['grossMethod'])} />
                 <MethodSelect label="Petróleo" value={defaults.oilMethod} options={OIL_METHODS} onChange={(value) => updateForecastDefault('oilMethod', value as ForecastDefaults['oilMethod'])} />
                 <MethodSelect label="Gas" value={defaults.gasMethod} options={GAS_METHODS} onChange={(value) => updateForecastDefault('gasMethod', value as ForecastDefaults['gasMethod'])} />
-              </div>
-              <div className="forecast-output-note">
-                <strong>Gráficos técnicos separados</strong>
-                <span>Producción, relaciones, inyección, acumuladas, pozos y RAP vs. Np; cada visual conserva unidades compatibles.</span>
               </div>
               <label className="check-row">
                 <input type="checkbox" checked={defaults.takeInitialFromHistory} onChange={(event) => updateForecastDefault('takeInitialFromHistory', event.target.checked)} />
@@ -667,12 +705,44 @@ export function App() {
               </details>
 
               <div className="bulk-editor">
-                <div className="bulk-editor-heading"><strong>Cambio masivo</strong><span>Los campos vacíos no se modifican.</span></div>
-                <label>Aplicar a<select value={bulkScope} onChange={(event) => setBulkScope(event.target.value)}>
-                  <option value="all">Todas las concesiones ({forecastSelected.length})</option>
-                  {assetGroups.map((group) => <option key={group.id} value={`asset:${group.id}`}>Activo · {group.name} ({group.areaIds.length})</option>)}
-                  {forecastSelected.map((area) => <option key={area.areaId} value={`area:${area.areaId}`}>{area.areaId} · {area.areaName}</option>)}
-                </select></label>
+                <div className="bulk-editor-heading"><strong>Cambio masivo</strong><span>Marcá cualquier combinación, incluso entre activos distintos.</span></div>
+                <div className="bulk-picker">
+                  <label>Buscar concesión<input value={bulkQuery} onChange={(event) => setBulkQuery(event.target.value)} placeholder="Código, nombre, provincia o activo" /></label>
+                  <div className="bulk-shortcuts">
+                    <button type="button" onClick={() => setBulkSelectedAreaIds(forecastSelected.map((area) => area.areaId))}>Todas</button>
+                    <button type="button" onClick={() => setBulkSelectedAreaIds([])}>Ninguna</button>
+                    <button type="button" onClick={() => setBulkSelectedAreaIds(bulkVisibleAreaIds)} disabled={bulkVisibleAreaIds.length === 0}>Solo visibles</button>
+                  </div>
+                  <div className="bulk-area-groups">
+                    {bulkAreaGroups.map((group) => {
+                      const areaIds = group.areas.map((area) => area.areaId);
+                      const selectedCount = areaIds.filter((areaId) => bulkSelectedAreaIds.includes(areaId)).length;
+                      return (
+                        <section className="bulk-area-group" key={group.id}>
+                          <label className="bulk-group-toggle">
+                            <input
+                              type="checkbox"
+                              checked={selectedCount === areaIds.length}
+                              ref={(element) => { if (element) element.indeterminate = selectedCount > 0 && selectedCount < areaIds.length; }}
+                              onChange={() => toggleBulkGroup(areaIds)}
+                            />
+                            <span><strong>{group.name}</strong><small>{selectedCount}/{areaIds.length}</small></span>
+                          </label>
+                          <div className="bulk-area-options">
+                            {group.areas.map((area) => (
+                              <label className="bulk-area-option" key={area.areaId} title={`${area.areaId} · ${area.areaName}`}>
+                                <input type="checkbox" checked={bulkSelectedAreaIds.includes(area.areaId)} onChange={() => toggleBulkArea(area.areaId)} />
+                                <span><strong>{area.areaId}</strong><small>{area.areaName} · {area.province}</small></span>
+                              </label>
+                            ))}
+                          </div>
+                        </section>
+                      );
+                    })}
+                    {bulkAreaGroups.length === 0 && <div className="empty-state compact">No hay concesiones que coincidan con la búsqueda.</div>}
+                  </div>
+                  <p className="bulk-selection-summary"><strong>{bulkSelectedAreaIds.length}</strong> {bulkSelectedAreaIds.length === 1 ? 'concesión seleccionada' : 'concesiones seleccionadas'}{bulkSelectedAssetCount ? ` · ${bulkSelectedAssetCount} ${bulkSelectedAssetCount === 1 ? 'activo' : 'activos'}` : ''}</p>
+                </div>
                 <div className="bulk-methods">
                   <label>Bruta<select value={bulkDraft.grossMethod} onChange={(event) => setBulkDraft((current) => ({ ...current, grossMethod: event.target.value as BulkForecastDraft['grossMethod'] }))}><option value="">No cambiar</option>{GROSS_METHODS.map((item) => <option key={item}>{item}</option>)}</select></label>
                   <label>Petróleo<select value={bulkDraft.oilMethod} onChange={(event) => setBulkDraft((current) => ({ ...current, oilMethod: event.target.value as BulkForecastDraft['oilMethod'] }))}><option value="">No cambiar</option>{OIL_METHODS.map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -681,23 +751,23 @@ export function App() {
                 <details className="decline-editor">
                   <summary>Declinaciones Di y exponentes b</summary>
                   <div className="decline-grid">
-                    <label>Di bruta<input inputMode="decimal" value={bulkDraft.grossDi} onChange={(event) => setBulkDraft((current) => ({ ...current, grossDi: event.target.value }))} placeholder="0,12" /></label>
-                    <label>b bruta<input inputMode="decimal" value={bulkDraft.grossB} onChange={(event) => setBulkDraft((current) => ({ ...current, grossB: event.target.value }))} placeholder="0,70" /></label>
-                    <label>Di petróleo<input inputMode="decimal" value={bulkDraft.oilDi} onChange={(event) => setBulkDraft((current) => ({ ...current, oilDi: event.target.value }))} placeholder="0,12" /></label>
-                    <label>b petróleo<input inputMode="decimal" value={bulkDraft.oilB} onChange={(event) => setBulkDraft((current) => ({ ...current, oilB: event.target.value }))} placeholder="0,70" /></label>
-                    <label>Di gas<input inputMode="decimal" value={bulkDraft.gasDi} onChange={(event) => setBulkDraft((current) => ({ ...current, gasDi: event.target.value }))} placeholder="0,12" /></label>
-                    <label>b gas<input inputMode="decimal" value={bulkDraft.gasB} onChange={(event) => setBulkDraft((current) => ({ ...current, gasB: event.target.value }))} placeholder="0,70" /></label>
+                    <label><HelpLabel label="Di bruta" help="Declinación inicial anual: indica qué tan rápido empieza a caer la producción bruta. 0,12 equivale a 12% anual." /><input inputMode="decimal" value={bulkDraft.grossDi} onChange={(event) => setBulkDraft((current) => ({ ...current, grossDi: event.target.value }))} placeholder="0,12" /></label>
+                    <label><HelpLabel label="b bruta" help="Exponente de curvatura de la declinación hiperbólica. Un b mayor suaviza la caída inicial; si no estás seguro, conservá el valor sugerido." /><input inputMode="decimal" value={bulkDraft.grossB} onChange={(event) => setBulkDraft((current) => ({ ...current, grossB: event.target.value }))} placeholder="0,70" /></label>
+                    <label><HelpLabel label="Di petróleo" help="Declinación inicial anual del petróleo: un valor más alto hace caer más rápido el caudal al comienzo del pronóstico." /><input inputMode="decimal" value={bulkDraft.oilDi} onChange={(event) => setBulkDraft((current) => ({ ...current, oilDi: event.target.value }))} placeholder="0,12" /></label>
+                    <label><HelpLabel label="b petróleo" help="Define la forma de la curva hiperbólica de petróleo. Cerca de 0 se parece a una declinación exponencial." /><input inputMode="decimal" value={bulkDraft.oilB} onChange={(event) => setBulkDraft((current) => ({ ...current, oilB: event.target.value }))} placeholder="0,70" /></label>
+                    <label><HelpLabel label="Di gas" help="Declinación inicial anual del gas: un valor más alto hace caer más rápido el caudal al comienzo del pronóstico." /><input inputMode="decimal" value={bulkDraft.gasDi} onChange={(event) => setBulkDraft((current) => ({ ...current, gasDi: event.target.value }))} placeholder="0,12" /></label>
+                    <label><HelpLabel label="b gas" help="Define la forma de la curva hiperbólica de gas. Si no estás seguro, conservá el valor sugerido." /><input inputMode="decimal" value={bulkDraft.gasB} onChange={(event) => setBulkDraft((current) => ({ ...current, gasB: event.target.value }))} placeholder="0,70" /></label>
                   </div>
                   <p className="helper-text">Di se expresa como fracción anual: 0,12 equivale a 12%.</p>
                 </details>
-                <button type="button" className="bulk-apply" onClick={applyBulkForecastSettings} disabled={forecastSelected.length === 0}>Aplicar a {bulkScopeAreaIds().length} {bulkScopeAreaIds().length === 1 ? 'concesión' : 'concesiones'}</button>
+                <button type="button" className="bulk-apply" onClick={applyBulkForecastSettings} disabled={bulkSelectedAreaIds.length === 0}>Aplicar a {bulkSelectedAreaIds.length} {bulkSelectedAreaIds.length === 1 ? 'concesión' : 'concesiones'}</button>
               </div>
             </section>
 
             <section className="panel">
               <SectionHeading step="3" title="Elegí qué pronosticar" description={`${forecastSelected.length} ${forecastSelected.length === 1 ? 'área activa' : 'áreas activas'}`} />
               <ModeSelector mode={forecastMode} onChange={setForecastMode} updateText="Conserva los supuestos editados en Prono y Pozos." regenerateText="Reconstruye pronósticos, gráficos y resumen desde cero." />
-              {forecastSelected.length === 0 ? <div className="empty-state compact">No hay datos cargados. Volvé al flujo Datos o leé el estado del libro.</div> : (
+              {forecastSelected.length === 0 ? <div className="empty-state compact">No hay datos cargados. Volvé al flujo Datos para crear la base en este libro.</div> : (
                 <div className="selected-areas">
                   {forecastSelected.map((area) => {
                     const areaOverride = overrides[area.areaId];
@@ -793,6 +863,10 @@ function OverrideSelect({ label, value, globalValue, options, onChange }: { labe
   return <label>{label}<select value={value ?? ''} onChange={(event) => onChange(event.target.value)}><option value="">Global ({globalValue})</option>{options.map((option) => <option key={option}>{option}</option>)}</select></label>;
 }
 
+function HelpLabel({ label, help }: { label: string; help: string }) {
+  return <span className="field-label">{label}<span className="info-tooltip" tabIndex={0} role="note" aria-label={`${label}: ${help}`} data-tooltip={help} title={help}>?</span></span>;
+}
+
 function StartYearField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
   const valid = isValidStartYear(value);
   const errorId = `${id}-error`;
@@ -832,12 +906,6 @@ export function isValidStartYear(value: string): boolean {
   if (!/^\d{4}$/.test(value)) return false;
   const year = Number(value);
   return year >= START_YEAR_MIN && year <= START_YEAR_MAX;
-}
-
-function formatSavedDate(value?: string): string {
-  if (!value) return 'sin fecha';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'sin fecha' : date.toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
 function companyNames(area: Pick<AreaCatalogItem, 'companies'>): string {

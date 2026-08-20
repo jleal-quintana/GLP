@@ -19,6 +19,17 @@ export interface CapivResourceCatalog {
   productionByYear: Record<number, CkanResource>;
 }
 
+export interface CatalogLoadProgress {
+  step: 1 | 2 | 3;
+  message: string;
+}
+
+export interface AreaProductionSource {
+  sourceAreaId: string;
+  siglaPattern?: RegExp;
+  note?: string;
+}
+
 let resourceCatalogPromise: Promise<CapivResourceCatalog> | undefined;
 
 export function discoverCapivResources(resources: CkanResource[]): CapivResourceCatalog {
@@ -167,17 +178,22 @@ function numberValue(record: Record<string, string>, ...keys: string[]): number 
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-export async function fetchAreaCatalog(): Promise<AreaCatalogItem[]> {
+export async function fetchAreaCatalog(onProgress?: (progress: CatalogLoadProgress) => void): Promise<AreaCatalogItem[]> {
+  onProgress?.({ step: 1, message: 'Conectando con el servicio seguro de CapIV' });
   const optimizedCatalogUrl = catalogProxyUrl();
   if (optimizedCatalogUrl) {
     const response = await fetchWithRetry(optimizedCatalogUrl);
     if (!response.ok) throw new Error(`No se pudo consultar el catálogo optimizado (HTTP ${response.status}).`);
+    onProgress?.({ step: 2, message: 'Respuesta recibida; leyendo la lista de áreas' });
     const catalog = await response.json();
     if (!Array.isArray(catalog)) throw new Error('El catálogo optimizado devolvió una respuesta inválida.');
+    onProgress?.({ step: 3, message: 'Validando nombres, provincias y empresas' });
     return catalog as AreaCatalogItem[];
   }
+  onProgress?.({ step: 1, message: 'Consultando los recursos oficiales disponibles' });
   const resources = await loadResourceCatalog();
   const byArea = new Map<string, AreaCatalogItem>();
+  onProgress?.({ step: 2, message: 'Leyendo el padrón oficial de pozos y áreas' });
   await streamResourceCsv(resources.wells, (record) => {
     const areaId = text(record, 'cod_area', 'idareapermisoconcesion');
     const areaName = text(record, 'area', 'areapermisoconcesion');
@@ -199,14 +215,40 @@ export async function fetchAreaCatalog(): Promise<AreaCatalogItem[]> {
     });
   });
 
+  onProgress?.({ step: 3, message: 'Ordenando áreas, provincias y empresas' });
   return [...byArea.values()].sort((a, b) =>
     `${a.province}|${a.areaName}`.localeCompare(`${b.province}|${b.areaName}`, 'es'),
   );
 }
 
-function normalizeProductionRecord(record: Record<string, string>, areaId: string, areaName: string): ProductionRecord | null {
+export function productionSourceForArea(areaId: string, year: number): AreaProductionSource {
+  if (year === 2021 && areaId === 'EPMD') {
+    return {
+      sourceAreaId: 'EPN',
+      siglaPattern: /\.Md/i,
+      note: 'El recurso oficial 2021 usa el código legado EPN; se recupera la porción Mendoza por sigla de pozo.',
+    };
+  }
+  if (year === 2021 && areaId === 'EPNQ') {
+    return {
+      sourceAreaId: 'EPN',
+      siglaPattern: /\.Nq\./i,
+      note: 'El recurso oficial 2021 usa el código legado EPN; se recupera la porción Neuquén por sigla de pozo.',
+    };
+  }
+  return { sourceAreaId: areaId };
+}
+
+function normalizeProductionRecord(
+  record: Record<string, string>,
+  areaId: string,
+  areaName: string,
+  source: AreaProductionSource,
+): ProductionRecord | null {
   const recordAreaId = text(record, 'idareapermisoconcesion', 'cod_area');
-  if (recordAreaId !== areaId) return null;
+  if (recordAreaId !== source.sourceAreaId) return null;
+  const wellName = text(record, 'sigla');
+  if (source.siglaPattern && !source.siglaPattern.test(wellName)) return null;
 
   const year = numberValue(record, 'anio');
   const month = numberValue(record, 'mes');
@@ -216,7 +258,7 @@ function normalizeProductionRecord(record: Record<string, string>, areaId: strin
     areaId,
     areaName,
     wellId: text(record, 'idpozo'),
-    wellName: text(record, 'sigla'),
+    wellName,
     year,
     month,
     oil: numberValue(record, 'prod_pet', 'prod_petroleo', 'petroleo'),
@@ -244,13 +286,15 @@ export async function fetchAreaProduction(
       onStep?.(`Sin recurso anual publicado para ${year}; se continúa con el siguiente año`);
       continue;
     }
+    const source = productionSourceForArea(area.areaId, year);
     await delay(DOWNLOAD_PAUSE_MS);
+    if (source.note) onStep?.(`${area.areaId} ${year}: ${source.note}`);
     onStep?.(`Descargando Capítulo IV ${area.areaId} ${year}`);
     await onEvent?.({ type: 'resource_started', areaId: area.areaId, source: 'capitulo-iv', year });
     let matched = 0;
     const matchedRows: ProductionRecord[] = [];
-    const rows = await loadAreaProductionResource(resource, area.areaId, (row) => {
-      const normalized = normalizeProductionRecord(row, area.areaId, area.areaName);
+    const rows = await loadAreaProductionResource(resource, source.sourceAreaId, (row) => {
+      const normalized = normalizeProductionRecord(row, area.areaId, area.areaName, source);
       if (!normalized) return;
       const key = `${normalized.wellName}|${normalized.wellId}|${normalized.year}|${normalized.month}`;
       if (seen.has(key)) return;

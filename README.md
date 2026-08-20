@@ -46,6 +46,8 @@ Los pronósticos se calculan **por área/concesión**: si se seleccionan varias,
 
 Los **activos** son opcionales. Se pueden crear, por ejemplo, activos individuales para CLME y EFO, y un activo Mendoza con sus seis concesiones. Las curvas siguen calculándose por concesión; CapIV suma las fórmulas de sus hojas `_Prono` en una hoja `Activo_<nombre>` con gráficos de petróleo, gas, agua y producción bruta. Si no se crea ningún activo, no cambia el comportamiento anterior y todo queda separado.
 
+Nota de compatibilidad: el CSV anual oficial de 2021 publica El Portón Mendoza y El Portón Neuquén bajo el código histórico conjunto `EPN`. CapIV recupera esas filas y las separa por la provincia indicada en la sigla del pozo, de acuerdo con la corrección publicada en el recurso oficial “DDJJ abiertas y cerradas”.
+
 ## Salida en el libro
 
 - `{AREA}_HDP`: histórico mensual.
