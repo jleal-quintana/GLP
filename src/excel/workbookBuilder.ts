@@ -197,6 +197,12 @@ export async function buildForecastWorkbook(
   await loggedStep('Resumen de activos', () => writeAssetSummaries(results, saved.assetGroups, assetGroups));
   const forecastSavedAt = new Date().toISOString();
   await loggedStep('Estado del libro', () => writeState(mergePlans(saved.plans, plans), saved.data, { dataSavedAt: saved.dataSavedAt, forecastSavedAt }, saved.dataOutput, assetGroups));
+  // Terminar mostrando el resumen consolidado (las hojas de activos se activan
+  // al escribirse). Cosmético: si falla no aborta la generación.
+  await Excel.run(async (context) => {
+    context.workbook.worksheets.getItem(SUMMARY_SHEET).activate();
+    await context.sync();
+  }).catch(() => undefined);
   report('Pronósticos actualizados', undefined, undefined, total - completed);
   await appendDebug(createDebugEntry('Fin pronósticos', 'ok', 'Pronósticos y resumen actualizados'));
 }
@@ -298,6 +304,7 @@ async function writeSummarySheet(
   tableLabel: string,
   chartPrefix?: string,
 ): Promise<void> {
+  const softWarnings: string[] = [];
   await Excel.run(async (context) => {
     // Syncs intermedios: atribuyen un fallo a la etapa exacta en la hoja Debug
     // y evitan acumular todo el resumen (tablas + fórmulas + gráficos) en un
@@ -308,6 +315,16 @@ async function writeSummarySheet(
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         throw new Error(`${label}: ${detail}`);
+      }
+    };
+    // Variante para etapas cosméticas: un fallo queda como warning en Debug
+    // sin abortar la generación.
+    const softCheckpoint = async (label: string) => {
+      try {
+        await context.sync();
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        softWarnings.push(`${label}: ${detail}`);
       }
     };
     const sheet = await getOrAddSheet(context, sheetName);
@@ -333,10 +350,17 @@ async function writeSummarySheet(
     });
     writeTable(sheet, 'A4:G4', headers, rows, tableLabel);
     await checkpoint('Tabla de áreas');
-    await writeConsolidatedMonthly(sheet, results, checkpoint, chartPrefix);
+    await writeConsolidatedMonthly(sheet, results, checkpoint, softCheckpoint, chartPrefix);
+    // freezeRows tira GeneralException si la hoja no está activa (bug conocido
+    // de Office.js): las hojas de área se recrean y quedan activas, pero esta
+    // persiste entre corridas, así que hay que activarla antes.
+    sheet.activate();
     sheet.freezePanes.freezeRows(14);
-    await checkpoint('Cierre de hoja');
+    await softCheckpoint('Inmovilizar paneles');
   });
+  for (const warning of softWarnings) {
+    await appendDebug(createDebugEntry(sheetName, 'warning', warning));
+  }
 }
 
 async function writeState(
@@ -369,6 +393,7 @@ async function writeConsolidatedMonthly(
   sheet: Excel.Worksheet,
   results: BuildResult[],
   checkpoint: (label: string) => Promise<void>,
+  softCheckpoint: (label: string) => Promise<void>,
   chartPrefix?: string,
 ): Promise<void> {
   const byDate = new Map<string, { oil: number; gas: number; water: number; gross: number; kind: 'hist' | 'prono' }>();
@@ -413,6 +438,7 @@ async function writeConsolidatedMonthly(
   addLineChart(sheet, grossSource, `${prefix}Producción bruta`, 'Q24', 'X42', 'm³/mes');
   await checkpoint('Gráfico Producción bruta');
   sheet.getRangeByIndexes(0, 25, Math.max(15 + rows.length, 16), 11).columnHidden = true;
+  await softCheckpoint('Ocultar columnas auxiliares');
 }
 
 function writeSummaryChartSource(
