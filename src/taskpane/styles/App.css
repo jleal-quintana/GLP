@@ -57,12 +57,12 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .section-heading p { margin: 3px 0 0; color: var(--muted); font-size: 10px; }
 
 label { display: grid; gap: 5px; margin: 0; color: var(--forest); font-size: 10px; font-weight: 700; }
-input, select { width: 100%; min-height: 35px; padding: 7px 9px; border: 1px solid #c7d0c9; border-radius: 8px; color: #1a1a1a; background: #fff; transition: border-color 120ms ease, box-shadow 120ms ease; }
+input, select { width: 100%; min-height: 35px; padding: 7px 9px; border: 1px solid #c7d0c9; border-radius: 8px; color: #1a1a1a; background: #fff; font-size: 10px; transition: border-color 120ms ease, box-shadow 120ms ease; }
 input:hover, select:hover { border-color: #9eaa9f; }
 input:disabled, select:disabled { color: #808782; background: #f4f5f3; }
 input[aria-invalid="true"] { border-color: #b56a10; background: #fffaf2; box-shadow: 0 0 0 2px rgb(181 106 16 / 0.08); }
 .field-error { color: #9a5410; font-size: 8px; font-weight: 600; line-height: 1.3; }
-button { min-height: 34px; padding: 7px 10px; border: 1px solid #aeb9af; border-radius: 8px; color: var(--forest); background: #fff; cursor: pointer; font-weight: 650; transition: transform 100ms ease, border-color 120ms ease, background 120ms ease; }
+button { min-height: 34px; padding: 7px 10px; border: 1px solid #aeb9af; border-radius: 8px; color: var(--forest); background: #fff; cursor: pointer; font-size: 10px; font-weight: 650; transition: transform 100ms ease, border-color 120ms ease, background 120ms ease; }
 button:hover:not(:disabled) { border-color: var(--olive); background: #f6f8f2; }
 button:active:not(:disabled) { transform: translateY(1px); }
 button:disabled { cursor: default; opacity: 0.52; }
@@ -92,8 +92,11 @@ button:disabled { cursor: default; opacity: 0.52; }
 .filter-toggle span { font-size: 9.2px; }
 .filter-toggle small { color: var(--muted); font-size: 8.4px; font-weight: 600; }
 .filter-toggle.open { border-color: var(--marine); background: #eef4f8; }
-.filter-list { display: grid; gap: 2px; max-height: 150px; overflow: auto; margin-top: 5px; padding: 5px; border: 1px solid #c9d6de; border-radius: 8px; background: white; scrollbar-width: thin; }
+.filter-list { display: grid; gap: 4px; margin-top: 5px; padding: 5px; border: 1px solid #c9d6de; border-radius: 8px; background: white; }
+.filter-search { min-height: 27px; padding: 4px 7px; border-color: #c9d6de; border-radius: 6px; font-size: 8.8px; }
 .filter-clear { min-height: 26px; padding: 3px 6px; border-color: #b8c9d5; color: var(--marine); font-size: 8.2px; }
+.filter-options { display: grid; gap: 2px; max-height: 130px; overflow: auto; scrollbar-width: thin; }
+.filter-empty { margin: 0; padding: 6px 4px; color: var(--muted); font-size: 8.4px; font-weight: 600; }
 .filter-option { display: flex; gap: 7px; align-items: center; min-width: 0; margin: 0; padding: 4px; border-radius: 5px; color: #2e4030; cursor: pointer; font-size: 8.8px; font-weight: 600; }
 .filter-option:hover { background: #f4f8fb; }
 .filter-option input { flex: 0 0 auto; width: 14px; min-height: 14px; margin: 0; padding: 0; accent-color: var(--marine); }
@@ -123,7 +126,11 @@ button:disabled { cursor: default; opacity: 0.52; }
 .param-row.excluded .param-chips { color: var(--muted); font-style: italic; }
 .dirty-dot { flex: 0 0 auto; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #b56a10; }
 .dirty-note { display: flex; gap: 6px; align-items: center; }
-.selection-editor { display: grid; gap: 9px; margin-top: 10px; padding: 10px; border: 1px solid #b8c9d5; border-radius: 10px; background: #f4f8fb; }
+.selection-editor { display: grid; gap: 9px; padding: 10px; border: 1px solid #b8c9d5; border-radius: 10px; background: #f4f8fb; }
+.asset-box { display: grid; gap: 9px; margin-top: 10px; padding: 10px; border: 1px solid #c7d3bd; border-radius: 10px; background: #f6f9f0; }
+.asset-box .selection-editor-heading strong { color: var(--forest); }
+.asset-box .asset-name-form { border-top-color: #d6e0c8; }
+.asset-box .selection-actions button { border-color: #b9c6a8; color: var(--forest); }
 .selection-editor-heading strong, .selection-editor-heading span { display: block; }
 .selection-editor-heading strong { color: var(--marine); font-size: 10px; }
 .selection-editor-heading span { margin-top: 3px; color: var(--muted); font-size: 8.5px; }
