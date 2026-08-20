@@ -70,6 +70,7 @@ export function App() {
   const [provinceFilters, setProvinceFilters] = useState<string[]>([]);
   const [companyFilters, setCompanyFilters] = useState<string[]>([]);
   const [openFilter, setOpenFilter] = useState<'province' | 'company' | null>(null);
+  const [filterQuery, setFilterQuery] = useState('');
   const [query, setQuery] = useState('');
   const [dataSelected, setDataSelected] = useState<AreaSelection[]>([]);
   const [forecastSelected, setForecastSelected] = useState<AreaSelection[]>([]);
@@ -575,12 +576,16 @@ export function App() {
     setSelected: React.Dispatch<React.SetStateAction<string[]>>,
   ) {
     const open = openFilter === key;
+    const normalizedQuery = normalizeText(filterQuery.trim());
+    const visibleOptions = normalizedQuery
+      ? options.filter((option) => normalizeText(option).includes(normalizedQuery))
+      : options;
     return (
       <div className="filter-group">
         <button
           type="button"
           className={open ? 'filter-toggle open' : 'filter-toggle'}
-          onClick={() => setOpenFilter(open ? null : key)}
+          onClick={() => { setOpenFilter(open ? null : key); setFilterQuery(''); }}
           disabled={!catalog.length || busy}
           aria-expanded={open}
         >
@@ -589,23 +594,34 @@ export function App() {
         </button>
         {open && (
           <div className="filter-list" role="group" aria-label={`Filtrar por ${label.toLocaleLowerCase('es-AR')}`}>
+            <input
+              type="search"
+              className="filter-search"
+              placeholder={`Buscar ${label.toLocaleLowerCase('es-AR')}…`}
+              value={filterQuery}
+              disabled={busy}
+              onChange={(event) => setFilterQuery(event.target.value)}
+            />
             {selected.length > 0 && (
               <button type="button" className="filter-clear" onClick={() => setSelected([])}>Limpiar filtro ({selected.length})</button>
             )}
-            {options.map((option) => {
-              const checked = selected.includes(option);
-              return (
-                <label key={option} className="filter-option" title={option}>
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    disabled={busy}
-                    onChange={() => setSelected((current) => (checked ? current.filter((value) => value !== option) : [...current, option]))}
-                  />
-                  <span>{option}</span>
-                </label>
-              );
-            })}
+            <div className="filter-options">
+              {visibleOptions.map((option) => {
+                const checked = selected.includes(option);
+                return (
+                  <label key={option} className="filter-option" title={option}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={busy}
+                      onChange={() => setSelected((current) => (checked ? current.filter((value) => value !== option) : [...current, option]))}
+                    />
+                    <span>{option}</span>
+                  </label>
+                );
+              })}
+              {visibleOptions.length === 0 && <p className="filter-empty">Sin coincidencias.</p>}
+            </div>
           </div>
         )}
       </div>
@@ -734,7 +750,7 @@ export function App() {
             <section className="panel">
               <SectionHeading
                 step="1"
-                title="Configurá las concesiones"
+                title="Organizá las concesiones"
                 description={forecastSelected.length ? `${includedAreas.length} de ${forecastSelected.length} se van a pronosticar` : 'Cada concesión tiene su propio pronóstico'}
               />
               {forecastSelected.length === 0 ? (
@@ -809,33 +825,13 @@ export function App() {
                     <p className="helper-text dirty-note"><i className="dirty-dot" /> {dirtyAreaCount} {dirtyAreaCount === 1 ? 'concesión tiene' : 'concesiones tienen'} cambios que se escriben en Excel al generar.</p>
                   )}
 
-                  <div className="selection-editor">
+                  <div className="asset-box">
                     <div className="selection-editor-heading">
-                      <strong>{selectedAreas.length ? `Aplicar a ${selectedAreas.length} ${selectedAreas.length === 1 ? 'seleccionada' : 'seleccionadas'}` : 'Editor de parámetros'}</strong>
-                      <span>{selectedAreas.length ? 'Cada cambio queda aplicado al instante; en Excel se escribe al generar.' : 'Marcá una o más concesiones para editar métodos y declinaciones.'}</span>
+                      <strong>{selectedAreas.length ? `Activo para ${selectedAreas.length} ${selectedAreas.length === 1 ? 'seleccionada' : 'seleccionadas'}` : 'Activos'}</strong>
+                      <span>{selectedAreas.length ? 'Agrupá la selección en un activo o sacala del actual.' : 'Marcá concesiones para agruparlas en un activo.'}</span>
                     </div>
                     {selectedAreas.length > 0 && (
                       <>
-                        <div className="editor-grid">
-                          <span className="editor-head" aria-hidden="true" />
-                          <span className="editor-head">Método</span>
-                          <span className="editor-head"><HelpLabel label="Di" help="Declinación inicial anual, como fracción: 0,12 equivale a 12% por año. Usada por los métodos de declinación." /></span>
-                          <span className="editor-head"><HelpLabel label="b" help="Exponente de curvatura de la declinación hiperbólica: mayor que 0 y hasta 2. Un b mayor suaviza la caída inicial." /></span>
-                          {renderMethodRow('Bruta', 'grossMethod', GROSS_METHODS, 'grossDi', 'grossB')}
-                          {renderMethodRow('Petróleo', 'oilMethod', OIL_METHODS, 'oilDi', 'oilB')}
-                          {renderMethodRow('Gas', 'gasMethod', GAS_METHODS, 'gasDi', 'gasB')}
-                        </div>
-                        <label className="editor-initial">Valor inicial
-                          <select
-                            value={initialUniform === undefined ? MIXED : initialUniform ? 'history' : 'manual'}
-                            disabled={buildBusy}
-                            onChange={(event) => changeSelectionInitial(event.target.value)}
-                          >
-                            {initialUniform === undefined && <option value={MIXED}>— Varios —</option>}
-                            <option value="history">Desde histórico</option>
-                            <option value="manual">Manual en Excel</option>
-                          </select>
-                        </label>
                         <div className="selection-actions">
                           <button type="button" onClick={() => setAssetFormOpen((open) => !open)} disabled={buildBusy}>Agrupar en activo…</button>
                           {selectionHasAssigned && <button type="button" onClick={removeSelectionFromAssets} disabled={buildBusy}>Sacar del activo</button>}
@@ -855,7 +851,49 @@ export function App() {
             </section>
 
             <section className="panel">
-              <SectionHeading step="2" title="Generación" description="Escribe en este libro; no descarga datos" />
+              <SectionHeading
+                step="2"
+                title="Configurá los parámetros"
+                description="Los parámetros pueden variar dentro de un activo o repetirse entre activos"
+              />
+              {forecastSelected.length === 0 ? (
+                <div className="empty-state compact">Sin datos cargados no hay parámetros para editar.</div>
+              ) : (
+                <div className="selection-editor">
+                  <div className="selection-editor-heading">
+                    <strong>{selectedAreas.length ? `Aplicar a ${selectedAreas.length} ${selectedAreas.length === 1 ? 'seleccionada' : 'seleccionadas'}` : 'Editor de parámetros'}</strong>
+                    <span>{selectedAreas.length ? 'Cada cambio queda aplicado al instante; en Excel se escribe al generar.' : 'Marcá una o más concesiones en el paso 1 para editar métodos y declinaciones.'}</span>
+                  </div>
+                  {selectedAreas.length > 0 && (
+                    <>
+                      <div className="editor-grid">
+                        <span className="editor-head" aria-hidden="true" />
+                        <span className="editor-head">Método</span>
+                        <span className="editor-head"><HelpLabel label="Di" help="Declinación inicial anual, como fracción: 0,12 equivale a 12% por año. Usada por los métodos de declinación." /></span>
+                        <span className="editor-head"><HelpLabel label="b" help="Exponente de curvatura de la declinación hiperbólica: mayor que 0 y hasta 2. Un b mayor suaviza la caída inicial." /></span>
+                        {renderMethodRow('Bruta', 'grossMethod', GROSS_METHODS, 'grossDi', 'grossB')}
+                        {renderMethodRow('Petróleo', 'oilMethod', OIL_METHODS, 'oilDi', 'oilB')}
+                        {renderMethodRow('Gas', 'gasMethod', GAS_METHODS, 'gasDi', 'gasB')}
+                      </div>
+                      <label className="editor-initial">Valor inicial
+                        <select
+                          value={initialUniform === undefined ? MIXED : initialUniform ? 'history' : 'manual'}
+                          disabled={buildBusy}
+                          onChange={(event) => changeSelectionInitial(event.target.value)}
+                        >
+                          {initialUniform === undefined && <option value={MIXED}>— Varios —</option>}
+                          <option value="history">Desde histórico</option>
+                          <option value="manual">Manual en Excel</option>
+                        </select>
+                      </label>
+                    </>
+                  )}
+                </div>
+              )}
+            </section>
+
+            <section className="panel">
+              <SectionHeading step="3" title="Generación" description="Escribe en este libro; no descarga datos" />
               <div className="field-grid two-columns">
                 <label>Horizonte (años)<input type="number" min="1" max="40" value={defaults.horizonYears} onChange={(event) => setDefaults({ ...defaults, horizonYears: boundedNumber(event.target.value, 1, 40, defaults.horizonYears) })} /></label>
                 <label>Datos<input value={savedInfo ? `${savedInfo.areaCount} áreas` : 'Sin cargar'} disabled /></label>
@@ -966,6 +1004,10 @@ function methodChip(prefix: string, method: string, di: number, b: number): stri
   if (USES_DI.has(method)) chip += ` ${formatDecimal(di)}`;
   if (USES_B.has(method)) chip += `/${formatDecimal(b)}`;
   return chip;
+}
+
+function normalizeText(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleUpperCase('es-AR');
 }
 
 function formatDecimal(value: number): string {
