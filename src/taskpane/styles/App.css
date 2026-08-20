@@ -139,6 +139,11 @@ button:disabled { cursor: default; opacity: 0.52; }
 .editor-row-label { overflow: hidden; color: var(--forest); font-size: 9px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .editor-grid select, .editor-grid input { min-height: 30px; padding: 5px 6px; font-size: 9px; }
 .editor-grid .info-tooltip::after { right: -40px; }
+.draft-change { border-color: var(--marine); background: #fffdf2; box-shadow: 0 0 0 2px rgb(27 75 108 / 0.1); }
+.editor-actions { display: flex; gap: 7px; }
+.apply-params { flex: 1; min-height: 32px; border-color: var(--marine); color: white; background: var(--marine); font-size: 9.5px; }
+.apply-params:hover:not(:disabled) { border-color: #143a54; background: #143a54; }
+.apply-params:disabled { color: var(--muted); background: #eef1f3; border-color: #ccd6dc; opacity: 1; }
 .selection-actions { display: flex; gap: 7px; }
 .selection-actions button { flex: 1; min-height: 30px; padding: 5px 7px; border-color: #b8c9d5; color: var(--marine); font-size: 8.8px; }
 .asset-name-form { display: grid; gap: 7px; padding-top: 9px; border-top: 1px solid #d9e2e8; }

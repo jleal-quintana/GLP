@@ -80,6 +80,7 @@ export function App() {
   const [selectedParamAreaIds, setSelectedParamAreaIds] = useState<string[]>([]);
   const [forecastQuery, setForecastQuery] = useState('');
   const [numericDrafts, setNumericDrafts] = useState<Partial<Record<NumericParamField, string>>>({});
+  const [paramDraft, setParamDraft] = useState<Partial<AreaForecastParams>>({});
   const [assetGroups, setAssetGroups] = useState<AssetGroup[]>([]);
   const [assetFormOpen, setAssetFormOpen] = useState(false);
   const [assetNameDraft, setAssetNameDraft] = useState('');
@@ -180,6 +181,7 @@ export function App() {
 
   useEffect(() => {
     setNumericDrafts({});
+    setParamDraft({});
   }, [selectedParamAreaIds]);
 
   async function refreshCatalog() {
@@ -256,17 +258,38 @@ export function App() {
       return next;
     });
     markOverrideFields(targets, Object.keys(patch) as AreaForecastOverrideField[]);
-    setStatus({ tone: 'success', text: `Cambio aplicado a ${targets.length} ${targets.length === 1 ? 'concesión' : 'concesiones'}. Se escribe al generar.` });
+    setStatus({ tone: 'success', text: `Parámetros aplicados a ${targets.length} ${targets.length === 1 ? 'concesión' : 'concesiones'}. Se escriben en Excel al generar.` });
+  }
+
+  function stageDraft<K extends keyof AreaForecastParams>(key: K, value: AreaForecastParams[K]) {
+    setParamDraft((current) => {
+      const next = { ...current };
+      if (selectionValue(key) === value) delete next[key];
+      else next[key] = value;
+      return next;
+    });
+  }
+
+  function applyDraft() {
+    if (Object.keys(paramDraft).length === 0) return;
+    applyParamsPatch(paramDraft);
+    setParamDraft({});
+    setNumericDrafts({});
+  }
+
+  function discardDraft() {
+    setParamDraft({});
+    setNumericDrafts({});
   }
 
   function changeSelectionMethod(field: MethodParamField, value: string) {
     if (!value || value === MIXED) return;
-    applyParamsPatch({ [field]: value } as Partial<AreaForecastParams>);
+    stageDraft(field, value as AreaForecastParams[MethodParamField]);
   }
 
   function changeSelectionInitial(value: string) {
     if (!value || value === MIXED) return;
-    applyParamsPatch({ takeInitialFromHistory: value === 'history' });
+    stageDraft('takeInitialFromHistory', value === 'history');
   }
 
   function commitNumericDraft(field: NumericParamField) {
@@ -283,7 +306,7 @@ export function App() {
       delete next[field];
       return next;
     });
-    applyParamsPatch({ [field]: value } as Partial<AreaForecastParams>);
+    stageDraft(field, value);
   }
 
   function toggleParamArea(areaId: string) {
@@ -533,19 +556,26 @@ export function App() {
     diField: NumericParamField,
     bField: NumericParamField,
   ) {
-    const method = selectionValue(methodField);
-    const diValue = selectionValue(diField);
-    const bValue = selectionValue(bField);
+    const method = (paramDraft[methodField] as string | undefined) ?? selectionValue(methodField);
+    const diValue = (paramDraft[diField] as number | undefined) ?? selectionValue(diField);
+    const bValue = (paramDraft[bField] as number | undefined) ?? selectionValue(bField);
     const diDisabled = buildBusy || (method !== undefined && !USES_DI.has(method));
     const bDisabled = buildBusy || (method !== undefined && !USES_B.has(method));
     return (
       <React.Fragment key={methodField}>
         <span className="editor-row-label">{label}</span>
-        <select value={method ?? MIXED} disabled={buildBusy} onChange={(event) => changeSelectionMethod(methodField, event.target.value)} aria-label={`Método ${label}`}>
+        <select
+          className={paramDraft[methodField] !== undefined ? 'draft-change' : undefined}
+          value={method ?? MIXED}
+          disabled={buildBusy}
+          onChange={(event) => changeSelectionMethod(methodField, event.target.value)}
+          aria-label={`Método ${label}`}
+        >
           {method === undefined && <option value={MIXED}>— Varios —</option>}
           {options.map((option) => <option key={option}>{option}</option>)}
         </select>
         <input
+          className={paramDraft[diField] !== undefined ? 'draft-change' : undefined}
           inputMode="decimal"
           value={numericDrafts[diField] ?? (diValue !== undefined ? formatDecimal(diValue) : '')}
           placeholder={diValue === undefined ? 'varios' : '0,12'}
@@ -556,6 +586,7 @@ export function App() {
           aria-label={`Di ${label}`}
         />
         <input
+          className={paramDraft[bField] !== undefined ? 'draft-change' : undefined}
           inputMode="decimal"
           value={numericDrafts[bField] ?? (bValue !== undefined ? formatDecimal(bValue) : '')}
           placeholder={bValue === undefined ? 'varios' : '0,70'}
@@ -629,7 +660,8 @@ export function App() {
     );
   }
 
-  const initialUniform = selectionValue('takeInitialFromHistory');
+  const initialUniform = paramDraft.takeInitialFromHistory ?? selectionValue('takeInitialFromHistory');
+  const draftCount = Object.keys(paramDraft).length;
 
   return (
     <main className="app-shell">
@@ -862,8 +894,8 @@ export function App() {
               ) : (
                 <div className="selection-editor">
                   <div className="selection-editor-heading">
-                    <strong>{selectedAreas.length ? `Aplicar a ${selectedAreas.length} ${selectedAreas.length === 1 ? 'seleccionada' : 'seleccionadas'}` : 'Editor de parámetros'}</strong>
-                    <span>{selectedAreas.length ? 'Cada cambio queda aplicado al instante; en Excel se escribe al generar.' : 'Marcá una o más concesiones en el paso 1 para editar métodos y declinaciones.'}</span>
+                    <strong>{selectedAreas.length ? `Parámetros de ${selectedAreas.length} ${selectedAreas.length === 1 ? 'seleccionada' : 'seleccionadas'}` : 'Editor de parámetros'}</strong>
+                    <span>{selectedAreas.length ? 'Ajustá los valores y confirmá con el botón Aplicar.' : 'Marcá una o más concesiones en el paso 1 para editar métodos y declinaciones.'}</span>
                   </div>
                   {selectedAreas.length > 0 && (
                     <>
@@ -878,6 +910,7 @@ export function App() {
                       </div>
                       <label className="editor-initial">Valor inicial
                         <select
+                          className={paramDraft.takeInitialFromHistory !== undefined ? 'draft-change' : undefined}
                           value={initialUniform === undefined ? MIXED : initialUniform ? 'history' : 'manual'}
                           disabled={buildBusy}
                           onChange={(event) => changeSelectionInitial(event.target.value)}
@@ -887,6 +920,19 @@ export function App() {
                           <option value="manual">Manual en Excel</option>
                         </select>
                       </label>
+                      <div className="editor-actions">
+                        <button
+                          type="button"
+                          className="apply-params"
+                          onClick={applyDraft}
+                          disabled={buildBusy || draftCount === 0}
+                        >
+                          {draftCount === 0
+                            ? 'Sin cambios para aplicar'
+                            : `Aplicar a ${selectedAreas.length} ${selectedAreas.length === 1 ? 'seleccionada' : 'seleccionadas'}`}
+                        </button>
+                        {draftCount > 0 && <button type="button" className="ghost" onClick={discardDraft} disabled={buildBusy}>Descartar</button>}
+                      </div>
                     </>
                   )}
                 </div>
