@@ -164,7 +164,9 @@ export async function writeForecastCharts(
   }
 
   sheet.getRangeByIndexes(0, 25, Math.max(totalMonths + 1, historyMonths + 1), helperColumn - 25).columnHidden = true;
-  sheet.getRange('A:P').format.columnWidth = 11;
+  // columnWidth se mide en puntos: 44pt ≈ 59px por columna, para que cada
+  // gráfico (anclado a 8 columnas) quede de ~470px de ancho.
+  sheet.getRange('A:P').format.columnWidth = 44;
   await checkpoint('Ocultar columnas auxiliares');
 }
 

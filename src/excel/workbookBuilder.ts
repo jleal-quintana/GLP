@@ -192,11 +192,11 @@ export async function buildForecastWorkbook(
   }
 
   report('Escribiendo resumen consolidado', undefined, undefined, 1);
-  await writeSummary(results);
+  await loggedStep('Resumen consolidado', () => writeSummary(results));
   const assetGroups = normalizeAssetGroups(options.assetGroups ?? saved.assetGroups, results.map((result) => result.areaId));
-  await writeAssetSummaries(results, saved.assetGroups, assetGroups);
+  await loggedStep('Resumen de activos', () => writeAssetSummaries(results, saved.assetGroups, assetGroups));
   const forecastSavedAt = new Date().toISOString();
-  await writeState(mergePlans(saved.plans, plans), saved.data, { dataSavedAt: saved.dataSavedAt, forecastSavedAt }, saved.dataOutput, assetGroups);
+  await loggedStep('Estado del libro', () => writeState(mergePlans(saved.plans, plans), saved.data, { dataSavedAt: saved.dataSavedAt, forecastSavedAt }, saved.dataOutput, assetGroups));
   report('Pronósticos actualizados', undefined, undefined, total - completed);
   await appendDebug(createDebugEntry('Fin pronósticos', 'ok', 'Pronósticos y resumen actualizados'));
 }
@@ -218,6 +218,18 @@ function estimateWorkUnits(plans: AreaWorkbookPlan[]): number {
     const startYear = plan.override?.startYear ?? plan.selection.startYearOverride ?? plan.defaults.startYear;
     return total + countProductionResources(startYear) + perAreaFixedSteps;
   }, globalSteps);
+}
+
+async function loggedStep(step: string, action: () => Promise<void>): Promise<void> {
+  await appendDebug(createDebugEntry(step, 'info', `Escribiendo ${step}`));
+  try {
+    await action();
+    await appendDebug(createDebugEntry(step, 'ok', `${step} listo`));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    await appendDebug(createDebugEntry(step, 'error', `Fallo ${step}: ${detail}`));
+    throw error;
+  }
 }
 
 function mergePlans(existing: AreaWorkbookPlan[], replacements: AreaWorkbookPlan[]): AreaWorkbookPlan[] {
@@ -262,14 +274,19 @@ async function writeAssetSummaries(
   for (const group of groups) {
     const included = results.filter((result) => group.areaIds.includes(result.areaId));
     if (included.length === 0) continue;
-    await writeSummarySheet(
-      assetSheetName(group.name),
-      `Resumen de activo - ${group.name}`,
-      `Suma de ${included.length} ${included.length === 1 ? 'concesión' : 'concesiones'} pronosticadas por separado`,
-      included,
-      `Activo ${group.name}`,
-      group.name,
-    );
+    try {
+      await writeSummarySheet(
+        assetSheetName(group.name),
+        `Resumen de activo - ${group.name}`,
+        `Suma de ${included.length} ${included.length === 1 ? 'concesión' : 'concesiones'} pronosticadas por separado`,
+        included,
+        `Activo ${group.name}`,
+        group.name,
+      );
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`Activo ${group.name}: ${detail}`);
+    }
   }
 }
 
@@ -282,12 +299,24 @@ async function writeSummarySheet(
   chartPrefix?: string,
 ): Promise<void> {
   await Excel.run(async (context) => {
+    // Syncs intermedios: atribuyen un fallo a la etapa exacta en la hoja Debug
+    // y evitan acumular todo el resumen (tablas + fórmulas + gráficos) en un
+    // solo batch, que con muchas áreas puede tirar un error interno de Excel.
+    const checkpoint = async (label: string) => {
+      try {
+        await context.sync();
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`${label}: ${detail}`);
+      }
+    };
     const sheet = await getOrAddSheet(context, sheetName);
     const charts = sheet.charts;
     charts.load('items');
     await context.sync();
     for (const chart of charts.items) chart.delete();
     sheet.getRange().clear();
+    await checkpoint('Preparación de hoja');
     writeTitle(sheet, title, subtitle);
     const headers = ['Área', 'Nombre', 'Último mes', 'Petróleo último', 'Gas último', 'Bruta última', 'Advertencias'];
     const rows = results.map((result) => {
@@ -303,9 +332,10 @@ async function writeSummarySheet(
       ];
     });
     writeTable(sheet, 'A4:G4', headers, rows, tableLabel);
-    writeConsolidatedMonthly(sheet, results, chartPrefix);
+    await checkpoint('Tabla de áreas');
+    await writeConsolidatedMonthly(sheet, results, checkpoint, chartPrefix);
     sheet.freezePanes.freezeRows(14);
-    await context.sync();
+    await checkpoint('Cierre de hoja');
   });
 }
 
@@ -335,7 +365,12 @@ function writeWorkbookState(sheet: Excel.Worksheet, state: unknown): void {
   writeMatrix(sheet, 'A1', rows.length ? rows : [['']], 'Estado workbook');
 }
 
-function writeConsolidatedMonthly(sheet: Excel.Worksheet, results: BuildResult[], chartPrefix?: string): void {
+async function writeConsolidatedMonthly(
+  sheet: Excel.Worksheet,
+  results: BuildResult[],
+  checkpoint: (label: string) => Promise<void>,
+  chartPrefix?: string,
+): Promise<void> {
   const byDate = new Map<string, { oil: number; gas: number; water: number; gross: number; kind: 'hist' | 'prono' }>();
   for (const result of results) {
     for (const month of result.summary) {
@@ -362,15 +397,21 @@ function writeConsolidatedMonthly(sheet: Excel.Worksheet, results: BuildResult[]
       ];
     });
   writeTable(sheet, 'A14:F14', ['Fecha', 'Tipo', 'Petróleo total', 'Gas total', 'Agua total', 'Bruta total'], rows, 'Resumen mensual');
+  await checkpoint('Tabla mensual consolidada');
   const oilSource = writeSummaryChartSource(sheet, 25, rows.length, 'C', 'Petróleo total');
   const gasSource = writeSummaryChartSource(sheet, 28, rows.length, 'D', 'Gas total');
   const waterSource = writeSummaryChartSource(sheet, 31, rows.length, 'E', 'Agua total');
   const grossSource = writeSummaryChartSource(sheet, 34, rows.length, 'F', 'Bruta total');
+  await checkpoint('Fuentes de gráficos');
   const prefix = chartPrefix ? `${chartPrefix} - ` : '';
   addLineChart(sheet, oilSource, `${prefix}Petróleo`, 'I4', 'P22', 'm³/mes');
+  await checkpoint('Gráfico Petróleo');
   addLineChart(sheet, gasSource, `${prefix}Gas`, 'Q4', 'X22', 'miles de m³/mes', '#1B4B6C');
+  await checkpoint('Gráfico Gas');
   addLineChart(sheet, waterSource, `${prefix}Agua`, 'I24', 'P42', 'm³/mes', '#1B4B6C');
+  await checkpoint('Gráfico Agua');
   addLineChart(sheet, grossSource, `${prefix}Producción bruta`, 'Q24', 'X42', 'm³/mes');
+  await checkpoint('Gráfico Producción bruta');
   sheet.getRangeByIndexes(0, 25, Math.max(15 + rows.length, 16), 11).columnHidden = true;
 }
 
