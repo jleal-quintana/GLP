@@ -1,4 +1,4 @@
-import { forecastFormula, lastNonMissing, nextMonth } from '../domain/forecast';
+import { DEFAULT_DECLINE, forecastFormula, lastNonMissing, nextMonth } from '../domain/forecast';
 import type { AreaForecastOverrideField, AreaWorkbookPlan, MonthlyAggregate, ProductionRecord } from '../models/types';
 import { appendDebug, createDebugEntry, ensureDebugSheet } from './debugSheet';
 import { writeForecastCharts } from './forecastCharts';
@@ -16,15 +16,6 @@ interface PreservedSettings {
     decline: (string | number)[][];
   };
 }
-
-const DEFAULT_DECLINE = {
-  grossDi: 0.12,
-  grossB: 0.7,
-  oilDi: 0.12,
-  oilB: 0.7,
-  gasDi: 0.12,
-  gasB: 0.7,
-} as const;
 
 export async function writeAreaSheets(
   plan: AreaWorkbookPlan,
