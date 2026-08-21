@@ -34,6 +34,17 @@ describe('forecast projection', () => {
     expect(evaluateForecast('Declinación Hip.', 100, 0.12, 0.7, 1)).toBeCloseTo(89.117, 3);
   });
 
+  it('uses the exponential limit for hyperbolic methods when b is zero', () => {
+    const exponential = evaluateForecast('Declinación Exp.', 100, 0.12, 0, 1);
+
+    expect(evaluateForecast('Declinación Hip.', 100, 0.12, 0, 1)).toBeCloseTo(exponential);
+    expect(evaluateForecast('HypMod', 100, 0.12, 0, 1)).toBeCloseTo(exponential);
+    expect(evaluateForecast('Rap Np', 100, 0.12, 0, 1)).toBeCloseTo(exponential);
+    expect(forecastFormula('B6', 100, 'E8', 'E9', 1)).toContain(
+      'IF(E9=0,100*EXP(-E8*1),100/POWER(1+E9*E8*1,1/E9))',
+    );
+  });
+
   it('moves a published month to the next projection month', () => {
     expect(nextMonth('2025-12-01')).toBe('2026-01-01');
   });
