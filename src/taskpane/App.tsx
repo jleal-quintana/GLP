@@ -428,7 +428,7 @@ export function App() {
     setStatus({ tone: 'neutral', text: 'Preparando descarga…' });
     try {
       const output = destinationMode === 'new-sheet'
-        ? await createNewDataSheetTarget(granularity)
+        ? await createNewDataSheetTarget(granularity, dataSelected)
         : dataOutput!;
       const plans = dataPlans(dataSelected, 'update');
       await downloadWorkbookData(plans, output, reportProgress, requestMissingMonths, requestOverwrite);

@@ -239,7 +239,7 @@ export function productionSourceForArea(areaId: string, year: number): AreaProdu
   return { sourceAreaId: areaId };
 }
 
-function normalizeProductionRecord(
+export function normalizeProductionRecord(
   record: Record<string, string>,
   areaId: string,
   areaName: string,
@@ -265,6 +265,7 @@ function normalizeProductionRecord(
     gas: numberValue(record, 'prod_gas', 'gas'),
     water: numberValue(record, 'prod_agua', 'agua'),
     waterInjection: numberValue(record, 'iny_agua', 'agua_iny', 'inyeccion_agua'),
+    gasInjection: numberValue(record, 'iny_gas', 'gas_iny', 'inyeccion_gas'),
     raw: {},
   };
 }
@@ -370,6 +371,7 @@ export function aggregateMonthly(records: ProductionRecord[], startYear: number)
     const oilWells = new Set(rows.filter((r) => r.oil > 0).map((r) => r.wellName || r.wellId));
     const gasWells = new Set(rows.filter((r) => r.gas > 0).map((r) => r.wellName || r.wellId));
     const injectorWells = new Set(rows.filter((r) => r.waterInjection > 0).map((r) => r.wellName || r.wellId));
+    const gasInjectorWells = new Set(rows.filter((r) => r.gasInjection > 0).map((r) => r.wellName || r.wellId));
 
     const oil = sum(rows, 'oil');
     const water = sum(rows, 'water');
@@ -382,9 +384,11 @@ export function aggregateMonthly(records: ProductionRecord[], startYear: number)
       water,
       gross: oil + water,
       waterInjection: sum(rows, 'waterInjection'),
+      gasInjection: sum(rows, 'gasInjection'),
       oilWells: oilWells.size,
       gasWells: gasWells.size,
       injectorWells: injectorWells.size,
+      gasInjectorWells: gasInjectorWells.size,
       missing,
       missingKind: !missing ? 'none' : key < firstKey ? 'leading' : 'middle',
     });
@@ -400,6 +404,6 @@ export function aggregateMonthly(records: ProductionRecord[], startYear: number)
   return output;
 }
 
-function sum(rows: ProductionRecord[], key: 'oil' | 'gas' | 'water' | 'waterInjection'): number {
+function sum(rows: ProductionRecord[], key: 'oil' | 'gas' | 'water' | 'waterInjection' | 'gasInjection'): number {
   return rows.reduce((total, row) => total + row[key], 0);
 }

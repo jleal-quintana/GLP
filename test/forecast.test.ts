@@ -13,9 +13,11 @@ function month(date: string, oil: number, missing = false): MonthlyAggregate {
     water: oil * 2,
     gross: oil * 3,
     waterInjection: 0,
+    gasInjection: 0,
     oilWells: oil > 0 ? 1 : 0,
     gasWells: 0,
     injectorWells: 0,
+    gasInjectorWells: 0,
     missing,
     missingKind: missing ? 'middle' : 'none',
   };

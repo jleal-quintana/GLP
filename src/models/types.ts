@@ -63,6 +63,7 @@ export interface ProductionRecord {
   gas: number;
   water: number;
   waterInjection: number;
+  gasInjection: number;
   raw: Record<string, unknown>;
 }
 
@@ -101,9 +102,11 @@ export interface MonthlyAggregate {
   water: number;
   gross: number;
   waterInjection: number;
+  gasInjection: number;
   oilWells: number;
   gasWells: number;
   injectorWells: number;
+  gasInjectorWells: number;
   missing: boolean;
   missingKind: 'none' | 'leading' | 'middle';
 }
