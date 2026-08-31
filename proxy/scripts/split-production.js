@@ -53,6 +53,7 @@ async function run() {
       prod_gas: textValue(row.prod_gas, row.gas),
       prod_agua: textValue(row.prod_agua, row.agua),
       iny_agua: textValue(row.iny_agua, row.agua_iny, row.inyeccion_agua),
+      iny_gas: textValue(row.iny_gas, row.gas_iny, row.inyeccion_gas),
     });
   }
 

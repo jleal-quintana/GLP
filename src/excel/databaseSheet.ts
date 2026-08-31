@@ -6,6 +6,7 @@ import type {
   ProductionRecord,
   WorkbookAreaData,
 } from '../models/types';
+import { dataSheetName } from './names';
 
 export interface DownloadedArea {
   plan: AreaWorkbookPlan;
@@ -34,12 +35,15 @@ export async function captureSelectedCell(granularity: DataOutputTarget['granula
   });
 }
 
-export async function createNewDataSheetTarget(granularity: DataOutputTarget['granularity']): Promise<DataOutputTarget> {
+export async function createNewDataSheetTarget(
+  granularity: DataOutputTarget['granularity'],
+  areas: Array<{ areaId: string; areaName: string }> = [],
+): Promise<DataOutputTarget> {
   return Excel.run(async (context) => {
     const sheets = context.workbook.worksheets;
     sheets.load('items/name');
     await context.sync();
-    const sheetName = nextAvailableDataSheetName(sheets.items.map((sheet) => sheet.name));
+    const sheetName = nextAvailableDataSheetName(sheets.items.map((sheet) => sheet.name), areas);
     return {
       sheetName,
       startAddress: 'A1',
@@ -167,7 +171,7 @@ export function buildDatabaseMatrix(granularity: DataOutputTarget['granularity']
 }
 
 function areaMatrix(downloads: DownloadedArea[]): (string | number)[][] {
-  const headers = ['Fecha', 'Año', 'Mes', 'Código área', 'Área', 'Provincia', 'Petróleo', 'Gas', 'Agua', 'Bruta', 'Agua inyectada', 'Pozos petróleo', 'Pozos gas', 'Inyectores'];
+  const headers = ['Fecha', 'Año', 'Mes', 'Código área', 'Área', 'Provincia', 'Petróleo', 'Gas', 'Agua', 'Bruta', 'Agua inyectada', 'Gas inyectado', 'Pozos petróleo', 'Pozos gas', 'Inyectores', 'Inyectores gas'];
   const rows = downloads.flatMap(({ plan, data }) => data.monthly.map((month) => areaRow(plan, month)));
   return [headers, ...rows];
 }
@@ -185,14 +189,16 @@ function areaRow(plan: AreaWorkbookPlan, month: MonthlyAggregate): (string | num
     month.water,
     month.gross,
     month.waterInjection,
+    month.gasInjection,
     month.oilWells,
     month.gasWells,
     month.injectorWells,
+    month.gasInjectorWells,
   ];
 }
 
 function wellMatrix(downloads: DownloadedArea[]): (string | number)[][] {
-  const headers = ['Año', 'Mes', 'Código área', 'Área', 'Provincia', 'ID pozo', 'Pozo', 'Petróleo', 'Gas', 'Agua', 'Agua inyectada'];
+  const headers = ['Año', 'Mes', 'Código área', 'Área', 'Provincia', 'ID pozo', 'Pozo', 'Petróleo', 'Gas', 'Agua', 'Agua inyectada', 'Gas inyectado'];
   const rows = downloads.flatMap(({ plan, records }) => records.map((record) => [
     record.year,
     record.month,
@@ -205,6 +211,7 @@ function wellMatrix(downloads: DownloadedArea[]): (string | number)[][] {
     record.gas,
     record.water,
     record.waterInjection,
+    record.gasInjection,
   ]));
   return [headers, ...rows];
 }
@@ -229,13 +236,11 @@ export function rangesOverlap(
   );
 }
 
-export function nextAvailableDataSheetName(existingNames: string[]): string {
-  const occupied = new Set(existingNames.map((name) => name.toLocaleLowerCase('es-AR')));
-  const base = 'CapIV_Datos';
-  if (!occupied.has(base.toLocaleLowerCase('es-AR'))) return base;
-  let suffix = 2;
-  while (occupied.has(`${base}_${suffix}`.toLocaleLowerCase('es-AR'))) suffix++;
-  return `${base}_${suffix}`;
+export function nextAvailableDataSheetName(
+  existingNames: string[],
+  areas: Array<{ areaId: string; areaName: string }> = [],
+): string {
+  return dataSheetName(areas, existingNames);
 }
 
 function excelColumn(index: number): string {
