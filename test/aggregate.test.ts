@@ -35,17 +35,18 @@ describe('aggregateMonthly', () => {
 
   it('keeps oil and water series intact while adding gas injection volumes and injector wells', () => {
     const rows = aggregateMonthly([
-      record(2024, 1, 10, { wellId: 'OIL', wellName: 'OIL', waterInjection: 4 }),
+      record(2024, 1, 10, { wellId: 'OIL', wellName: 'OIL', gas: 20, waterInjection: 4 }),
       record(2024, 1, 0, { wellId: 'GI', wellName: 'GI', gas: 0, water: 0, waterInjection: 0, gasInjection: 12 }),
     ], 2024);
 
     expect(rows[0].oil).toBe(10);
+    expect(rows[0].gas).toBe(20);
     expect(rows[0].waterInjection).toBe(4);
     expect(rows[0].injectorWells).toBe(1);
     expect(rows[0].gasInjection).toBe(12);
     expect(rows[0].gasInjectorWells).toBe(1);
     expect(rows[0].oilWells).toBe(1);
-    expect(rows[0].gasWells).toBe(0);
+    expect(rows[0].gasWells).toBe(1);
   });
 });
 
