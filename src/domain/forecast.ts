@@ -69,7 +69,7 @@ export function forecastFormula(
 
 export function nextMonth(date?: string): string {
   if (!date) return '';
-  const parsed = new Date(`${date}T00:00:00`);
-  parsed.setMonth(parsed.getMonth() + 1);
+  const parsed = new Date(`${date}T00:00:00Z`);
+  parsed.setUTCMonth(parsed.getUTCMonth() + 1);
   return parsed.toISOString().slice(0, 10);
 }
