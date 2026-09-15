@@ -47,6 +47,7 @@ export function evaluateForecast(method: ForecastMethod, initial: number, di: nu
   if (method === 'Constante') return initial;
   if (method === 'Declinación Exp.') return initial * Math.exp(-di * tYears);
   if (method === 'Declinación Hip.' || method === 'HypMod' || method === 'Rap Np') {
+    if (b === 0) return initial * Math.exp(-di * tYears);
     return initial / Math.pow(1 + b * di * tYears, 1 / b);
   }
   return initial;
@@ -64,7 +65,9 @@ export function forecastFormula(
   const initial = typeof initialValue === 'string' ? initialValue : Number.isFinite(initialValue) ? initialValue : 0;
   const oil = oilReference ?? initial;
   const t = Number(tYears.toFixed(6));
-  return `=IF(${methodCell}="Constante",${initial},IF(${methodCell}="Declinación Exp.",${initial}*EXP(-${diCell}*${t}),IF(${methodCell}="Declinación Hip.",${initial}/POWER(1+${bCell}*${diCell}*${t},1/${bCell}),IF(${methodCell}="HypMod",${initial}/POWER(1+${bCell}*${diCell}*${t},1/${bCell}),IF(${methodCell}="RGP",${rgpCell ?? 0}*${oil}/1000,IF(${methodCell}="Rap Np",${initial}/POWER(1+${bCell}*${diCell}*${t},1/${bCell}),${initial}))))))`;
+  const exponential = `${initial}*EXP(-${diCell}*${t})`;
+  const hyperbolic = `IF(${bCell}=0,${exponential},${initial}/POWER(1+${bCell}*${diCell}*${t},1/${bCell}))`;
+  return `=IF(${methodCell}="Constante",${initial},IF(${methodCell}="Declinación Exp.",${exponential},IF(${methodCell}="Declinación Hip.",${hyperbolic},IF(${methodCell}="HypMod",${hyperbolic},IF(${methodCell}="RGP",${rgpCell ?? 0}*${oil}/1000,IF(${methodCell}="Rap Np",${hyperbolic},${initial}))))))`;
 }
 
 export function nextMonth(date?: string): string {
