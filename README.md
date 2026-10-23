@@ -92,3 +92,11 @@ npm run build
 ```
 
 Los archivos `.xlsm` de la raíz son referencias funcionales y no son dependencias del add-in.
+
+### Espejo de la fuente oficial
+
+Desde octubre de 2026, `datos.energia.gob.ar` corta las conexiones que vienen de IPs de Azure (incluidos el Function App `capiv-data-proxy-qe` y los runners de GitHub Actions). Desde IPs argentinas sigue respondiendo. Por eso, el proxy ya no descarga los CSV: los lee del contenedor `production-cache`, que publica `proxy/scripts/mirror-capiv.py` desde `serverpython` (`~/capiv-mirror`, usuario `administrator`).
+
+- Cron cada 6 horas: catálogo de áreas (`catalog.json`) y los CSV del año actual y del anterior, ya recortados por área (`filtered/<año>/<área>.ndjson`). Log en `~/capiv-mirror/mirror.log`.
+- Backfill o reproceso manual: `python3 mirror-capiv.py --sas-file sas-url --years 2006-2026`.
+- El SAS (`~/capiv-mirror/sas-url`, permisos crear/escribir sobre el contenedor) vence el **23/10/2027**. Para regenerarlo: `az storage container generate-sas -n production-cache --permissions cw --expiry <fecha> --https-only` con la connection string `AzureWebJobsStorage` del Function App.

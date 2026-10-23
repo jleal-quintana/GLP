@@ -10,7 +10,6 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 const DATASET_URL = 'https://datos.gob.ar/api/3/action/package_show?id=produccion-de-petroleo-y-gas-por-pozo';
 const PRODUCTION_CONTAINER = 'production-cache';
-const CURRENT_YEAR_CACHE_MS = 6 * 60 * 60 * 1000;
 let catalogCache;
 let datasetCache;
 const productionCache = new Map();
@@ -158,9 +157,6 @@ async function loadPreFilteredProduction(target, areaId) {
   try {
     const container = await getProductionContainer();
     const recordsBlob = container.getBlobClient(`filtered/${year}/${encodeURIComponent(areaId)}.ndjson`);
-    const properties = await recordsBlob.getProperties();
-    if (year === new Date().getUTCFullYear()
-      && Date.now() - properties.lastModified.getTime() >= CURRENT_YEAR_CACHE_MS) return undefined;
     const recordsBuffer = await recordsBlob.downloadToBuffer();
     let scannedRows;
     try {
@@ -194,38 +190,31 @@ async function persistFilteredProduction(target, areaId, records) {
   }
 }
 
+// datos.energia.gob.ar resets connections from Azure IP ranges, so the CSVs and
+// filtered/ caches are published by proxy/scripts/mirror-capiv.py from an
+// on-prem server. The live source is only a fallback for years not mirrored.
 async function getProductionSource(target) {
   const year = productionYear(target);
-  if (year && process.env.AzureWebJobsStorage) {
-    try {
-      const container = await getProductionContainer();
-      const blob = container.getBlobClient(`${year}.csv`);
-      let properties;
-      try {
-        properties = await blob.getProperties();
-      } catch (error) {
-        if (error.statusCode !== 404) throw error;
-      }
-
-      const currentYear = new Date().getUTCFullYear();
-      const isFresh = properties?.contentLength > 0 && properties.copyStatus !== 'pending'
-        && (year < currentYear || Date.now() - properties.lastModified.getTime() < CURRENT_YEAR_CACHE_MS);
-      if (!isFresh) {
-        const poller = await blob.beginCopyFromURL(target.toString(), { intervalInMs: 2000 });
-        await poller.pollUntilDone();
-      }
-
-      const download = await blob.download();
-      if (download.readableStreamBody) return download.readableStreamBody;
-    } catch (error) {
-      // Keep the official source as a fallback while the cache is being seeded.
-      console.warn(`No se pudo usar el cache ${year}: ${error.message}`);
-    }
+  if (year) {
+    const mirrored = await downloadMirroredBlob(`${year}.csv`);
+    if (mirrored) return mirrored;
   }
 
   const response = await fetchAllowed(target);
   if (!response.ok || !response.body) throw new Error(`recurso anual HTTP ${response.status}`);
   return Readable.fromWeb(response.body);
+}
+
+async function downloadMirroredBlob(name) {
+  if (!process.env.AzureWebJobsStorage) return undefined;
+  try {
+    const container = await getProductionContainer();
+    const download = await container.getBlobClient(name).download();
+    if (download.contentLength > 0 && download.readableStreamBody) return download.readableStreamBody;
+  } catch (error) {
+    if (error.statusCode !== 404) console.warn(`No se pudo leer ${name}: ${error.message}`);
+  }
+  return undefined;
 }
 
 async function getProductionContainer() {
@@ -250,6 +239,15 @@ function productionYear(target) {
 
 async function buildAreaCatalog() {
   if (catalogCache && catalogCache.expiresAt > Date.now()) return catalogCache.value;
+  const mirrored = await downloadMirroredBlob('catalog.json');
+  if (mirrored) {
+    const chunks = [];
+    for await (const chunk of mirrored) chunks.push(chunk);
+    const value = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    catalogCache = { value, expiresAt: Date.now() + 15 * 60 * 1000 };
+    return value;
+  }
+
   const dataset = await loadDataset();
   const wells = (dataset.result?.resources || [])
     .filter((resource) => String(resource.format).toUpperCase() === 'CSV' && normalize(resource.name) === 'capitulo iv pozos')
