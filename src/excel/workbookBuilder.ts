@@ -466,13 +466,21 @@ function consolidatedFormula(results: BuildResult[], summaryRow: number, valueCo
   const terms: string[] = [];
   for (const result of results) {
     const pronoName = areaSheetNames(result.areaId).prono.replace(/'/g, "''");
-    const lastRow = 12 + result.summary.length;
+    const lastRow = pronoDataLastRow(result.monthly.length, result.summary);
     for (const columnIndex of valueColumns) {
       const column = excelColumn(columnIndex);
       terms.push(`SUMIF('${pronoName}'!$A$13:$A$${lastRow},$A${summaryRow},'${pronoName}'!$${column}$13:$${column}$${lastRow})`);
     }
   }
   return terms.length ? `=${terms.join('+')}` : '=0';
+}
+
+export function pronoDataLastRow(
+  historyMonthCount: number,
+  summary: ReadonlyArray<{ kind: 'hist' | 'prono' }>,
+): number {
+  const forecastMonthCount = summary.filter((month) => month.kind === 'prono').length;
+  return 12 + historyMonthCount + forecastMonthCount;
 }
 
 function excelColumn(index: number): string {
